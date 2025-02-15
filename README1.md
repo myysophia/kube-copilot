@@ -219,4 +219,5 @@ Kube-Copilot 是一个基于 LLM (Large Language Model) 的 Kubernetes 集群管
 - Python 版本: `ghcr.io/[owner]/kube-copilot:py`
 
 # ToDo list
-[ ] 在调用gpt api前应该有一个dry-run的参数来确定prompt是否合适。避免token消耗过多 
+[] 在调用gpt api前应该有一个dry-run的参数来确定prompt是否合适。避免token消耗过多 
+- prompt 可以从外部输入不一定要预制定。例如日志和监控作为prompt 来分析异常
