@@ -217,3 +217,6 @@ Kube-Copilot 是一个基于 LLM (Large Language Model) 的 Kubernetes 集群管
 - 版本化标签: `ghcr.io/[owner]/kube-copilot:[version]`
 - 最新版本: `ghcr.io/[owner]/kube-copilot:latest`
 - Python 版本: `ghcr.io/[owner]/kube-copilot:py`
+
+# ToDo list
+[ ] 在调用gpt api前应该有一个dry-run的参数来确定prompt是否合适。避免token消耗过多 
