@@ -44,6 +44,7 @@ var tokenLimitsPerModel = map[string]int{
 	"gpt-4":                  8192,
 	"text-davinci-002":       4096,
 	"text-davinci-003":       4096,
+	"qwen-plus":              4096,
 }
 
 // GetTokenLimits returns the maximum number of tokens for the given model.

@@ -28,14 +28,16 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+// OpenAIClient 封装了 OpenAI API 客户端
 type OpenAIClient struct {
 	*openai.Client
 
-	Retries int
-	Backoff time.Duration
+	Retries int           // 重试次数
+	Backoff time.Duration // 重试间隔
 }
 
-// NewOpenAIClient returns an OpenAI client.
+// NewOpenAIClient 创建新的 OpenAI 客户端
+// 支持标准 OpenAI API 和 Azure OpenAI API
 func NewOpenAIClient() (*OpenAIClient, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -63,6 +65,10 @@ func NewOpenAIClient() (*OpenAIClient, error) {
 	}, nil
 }
 
+// Chat 执行与 LLM 的对话
+// - model: 使用的模型名称
+// - maxTokens: 最大 token 数量
+// - prompts: 对话历史
 func (c *OpenAIClient) Chat(model string, maxTokens int, prompts []openai.ChatCompletionMessage) (string, error) {
 	req := openai.ChatCompletionRequest{
 		Model:       model,

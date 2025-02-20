@@ -54,8 +54,13 @@ Example output:
 - Ensure explanations are self-contained, enough for newcomers without previous technical exposure to understand.
 `
 
-// AuditFlow conducts a structured security audit of a Kubernetes Pod.
+// AuditFlow 执行 Kubernetes Pod 的安全审计工作流
+// 包括以下步骤：
+// 1. 获取 Pod 配置并分析安全风险
+// 2. 扫描容器镜像漏洞
+// 3. 生成安全报告和修复建议
 func AuditFlow(model string, namespace string, name string, verbose bool) (string, error) {
+	// 创建审计工作流
 	auditWorkflow := &swarm.Workflow{
 		Name:     "audit-workflow",
 		Model:    model,

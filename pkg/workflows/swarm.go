@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	// auditFunc is a Swarm function that conducts a structured security audit of a Kubernetes Pod.
+	// trivyFunc 是用于执行容器镜像安全扫描的函数
 	trivyFunc = swarm.NewAgentFunction(
 		"trivy",
 		"Run trivy image scanning for a given image",
@@ -33,7 +33,7 @@ var (
 		},
 	)
 
-	// kubectlFunc is a Swarm function that runs kubectl command.
+	// kubectlFunc 是用于执行 kubectl 命令的函数
 	kubectlFunc = swarm.NewAgentFunction(
 		"kubectl",
 		"Run kubectl command",
@@ -56,7 +56,11 @@ var (
 	)
 )
 
-// NewSwarm creates a new Swarm client.
+// NewSwarm 创建新的 Swarm 客户端
+// 支持多种 LLM 提供商：
+// - OpenAI API
+// - Azure OpenAI
+// - 其他 OpenAI 兼容的 LLM
 func NewSwarm() (*swarm.Swarm, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {

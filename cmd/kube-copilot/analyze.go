@@ -25,17 +25,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var analysisName string
-var analysisNamespace string
-var analysisResource string
-
+// 分析命令的配置参数
+var analysisName string      // 资源名称
+var analysisNamespace string // 命名空间
+var analysisResource string  // 资源类型
+// --model gpt-4o --verbose analyze velero-588d776b7b-tpzrg velero pod
 func init() {
+	// 初始化命令行参数
 	analyzeCmd.PersistentFlags().StringVarP(&analysisName, "name", "", "", "Resource name")
 	analyzeCmd.PersistentFlags().StringVarP(&analysisNamespace, "namespace", "n", "default", "Resource namespace")
 	analyzeCmd.PersistentFlags().StringVarP(&analysisResource, "resource", "r", "pod", "Resource type")
 	analyzeCmd.MarkFlagRequired("name")
 }
 
+// analyzeCmd 实现 Kubernetes 资源分析功能
+// 支持分析 Pod、Service 等资源的配置问题
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze",
 	Short: "Analyze issues for a given resource",

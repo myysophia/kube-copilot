@@ -222,3 +222,143 @@ Kube-Copilot 是一个基于 LLM (Large Language Model) 的 Kubernetes 集群管
 - 在调用gpt api前应该有一个dry-run的参数来确定prompt是否合适。避免token消耗过多 
 - prompt 可以从外部输入不一定要预制定。例如日志和监控作为prompt 来分析异常
 - 前端可以选择加载不同模型，类似于cherry studio 
+
+2025年02月17日22:39:59
+如何使用
+```bash
+./k8s-copilot --model chatgpt-4o-latest --verbose  execute  '查询集群ems-eu namespace的pod的内存和cpu limit值，以csv格式输出。表头包含pod名称、cpu、内存'
+```
+- gpt-4o-mini
+- chatgpt-4o-latest
+
+- goland debug 参数使用方式
+--model
+```bash
+--model gpt-4o --verbose execute 'how many namespace in the cluster?'
+
+--model gpt-4o --verbose analyze velero-588d776b7b-tpzrg velero pod
+```
+
+## 适配deepseek
+使用硅基流动的API 
+https://docs.siliconflow.cn/cn/userguide/guides/function-calling#function-calling
+--model deepseek-ai/DeepSeek-V3 --verbose analyze --name velero-588d776b7b-tpzrg --namespace velero --resource pod
+
+--model deepseek-ai/DeepSeek-V3 --verbose execute 'how many namespace in the cluster?'
+
+## 适配百炼模型
+需要确认是否支持function-calling，模型列表
+https://help.aliyun.com/zh/model-studio/developer-reference/compatibility-of-openai-with-dashscope?spm=a2c4g.11186623.help-menu-2400256.d_3_9_0.52da61324N8I4z&scm=20140722.H_2833609._.OR_help-T_cn~zh-V_1
+## 原生deepseek api
+deepseek官方文档明确说明function-calling支持不完善
+https://api-docs.deepseek.com/zh-cn/guides/function_calling
+### wildcard支持的module
+```
+models ： deepseek-r1 / gpt-4o / gpt-4o-mini / chatgpt-4o-latest / o3-mini
+```
+### 调用示例
+```bash
+--model deepseek-r1 --verbose execute 'how many namespaces in the cluster? please remeber prioritize using kubectl'
+```
+## 报错
+
+1. failed to create chat completion
+https://api.gptsapi.net/chat/completions post请求的json格式不兼容openai
+
+通义千问 模型也会报这个错误
+2. Unable to parse tool from prompt, assuming got final answer.
+deepseek 的response 返回了think的内容导致json解析失败. 需要在response中去掉think内容。
+```text
+<think>
+...
+</think>
+
+{
+	"question": "how many namespaces in the cluster? please remember prioritize using kubectl",
+	"thought": "To count namespaces, we'll use kubectl to list all namespaces and count them. Using '--no-headers' ensures we exclude column headers, and 'wc -l' counts lines. This avoids parsing JSON/YAML and leverages native command-line tools.",
+	"action": {
+		"name": "kubectl",
+		"input": "get namespaces --no-headers | wc -l"
+	},
+	"observation": "5",
+	"final_answer": "There are **5 namespaces** in the cluster."
+}
+```
+3.缓解模型绕过思考的方法
+   DeepSeek-R1 系列模型在回应某些查询时倾向于跳过思维模式（即输出“\n\n”），这可能会对模型的性能产生不利影响。
+   为了确保模型进行深入推理，建议强制要求模型在每次输出的开头以“<think>\n”开始其响应。
+
+4. failed to create chat completion
+调用阿里云和wildcard、deepseek都会有这个问你题，只有原生的gpt 不会报错。
+```json
+
+POST "https://dashscope.aliyuncs.com/compatible-mode/chat/completions": 404 Not Found
+2025年02月19日22:18:08
+	completion, err := c.client.Chat.Completions.New(ctx, params)
+
+这个是调用swarm-go的错误。需要修改这个模块的代码
+[swarm-go@v0.1.3](../../go/pkg/mod/github.com/feiskyer/swarm-go%40v0.1.3)
+
+```
+
+5. function call 外部工具报错
+   --model gpt-4o --verbose execute '查看名称包含iotdb的pod的镜像版本是什么?'
+   - 调用python脚本报错， 待解决 
+    ```json
+    Observation: Tool python failed with error Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+    from kubernetes import client, config
+    ModuleNotFoundError: No module named 'kubernetes'. Considering refine the inputs for the tool.
+    ```
+6. 外部工具不存在
+    ```
+   Observation: Tool jq is not available. Considering switch to other supported tools.
+   ```
+准备使用kubectl和jq 结合来解决这个问题: 查看名称包含iotdb的pod的镜像版本是什么?
+使用如下prompt最终解决了问题，消耗了大量的token，先-ojson 然后导出，qwen-plus最后还是给出了正确结果
+   qwen-plus是如何做的呢？
+```json
+您是Kubernetes和云原生网络的技术专家，您的任务是遵循特定的链式思维方法，以确保在遵守约束的情况下实现彻底性和准确性。
+
+可用工具：
+- kubectl：用于执行 Kubernetes 命令。输入：一个独立的 kubectl 命令（例如 'get pods -o json'），不支持直接包含管道或后续处理命令。输出：命令的结果，通常为 JSON 或文本格式。如果运行“kubectl top”，使用“--sort-by=memory”或“--sort-by=cpu”排序。
+- python：用于执行带有 Kubernetes Python SDK 的 Python 代码。输入：Python 脚本。输出：脚本的 stdout 和 stderr，使用 print(...) 输出结果。
+- trivy：用于扫描容器镜像中的漏洞。输入：镜像名称（例如 'nginx:latest'）。输出：漏洞报告。
+- jq：用于处理和查询 JSON 数据。输入：一个有效的 jq 表达式（例如 '-r .items[] | select(.metadata.name | test("iotdb")) | .spec.containers[].image'），需配合前一步的 JSON 输出使用。输出：查询结果。确保表达式针对 kubectl 返回的 JSON 结构设计，无需额外转义双引号（如 test("iotdb")）。
+
+您采取的步骤如下：
+1. 问题识别：清楚定义问题，描述观察到的症状或目标。
+2. 诊断命令：优先使用 kubectl 获取相关数据（如 JSON 输出），说明命令选择理由。如果需要进一步处理，使用 jq 分析前一步的结果。若适用 trivy，解释其用于镜像漏洞分析的原因。
+3. 输出解释：分析命令输出，描述系统状态、健康状况或配置情况，识别潜在问题。
+4. 故障排除策略：根据输出制定分步策略，证明每步如何与诊断结果相关。
+5. 可行解决方案：提出可执行的解决方案，优先使用 kubectl 命令。若涉及多步操作，说明顺序和预期结果。对于 trivy 识别的漏洞，基于最佳实践提供补救建议。
+6. 应急方案：如果工具不可用或命令失败，提供替代方法（如分步执行替代管道操作），确保仍能推进故障排除。
+
+响应格式：
+{
+	"question": "<输入问题>",
+	"thought": "<思维过程>",
+	"action": {
+		"name": "<工具名，从 [kubectl, python, trivy, jq] 中选择>",
+		"input": "<工具输入，确保包含所有必要上下文>"
+	},
+	"observation": "<工具执行结果，由外部填充>",
+	"final_answer": "<最终答案，仅在完成所有步骤且无需后续行动时设置>"
+}
+
+约束：
+- 优先使用 kubectl 获取数据，配合 jq 处理 JSON，单步执行优先。
+- 如果需要组合 kubectl 和 jq，应分步执行：先用 kubectl 获取 JSON，再用 jq 过滤或查询。
+- 避免将管道命令（如 'kubectl get pods -o json | jq ...'）作为单一输入，除非工具链明确支持 shell 管道并以 shell 模式执行。
+- 确保每步操作在单次 action 中完成（如获取 Pod 和提取镜像版本分两步），无需用户手动干预。
+- 禁止安装操作，所有步骤在现有工具约束内完成。
+- jq 表达式使用自然语法，双引号无需转义（如 test("iotdb") 或 contains("iotdb")）。
+
+目标：
+在 Kubernetes 和云原生网络领域内识别问题根本原因，提供清晰、可行的解决方案，同时保持诊断和故障排除的运营约束。
+
+```
+7. encoding for model: no encoding for model qwen-plus 报错
+
+tiktoken-go 提供一个高效、与 OpenAI 模型兼容的文本分词工具。它特别适用于需要与 OpenAI API 交互的场景，帮助开发者处理文本输入、计算 token 数，并确保与模型的令牌化过程一致。如果你正在用 Go 开发 AI 相关应用，这个包是一个非常实用的工具。
+
