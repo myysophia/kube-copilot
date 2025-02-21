@@ -362,3 +362,26 @@ POST "https://dashscope.aliyuncs.com/compatible-mode/chat/completions": 404 Not 
 
 tiktoken-go 提供一个高效、与 OpenAI 模型兼容的文本分词工具。它特别适用于需要与 OpenAI API 交互的场景，帮助开发者处理文本输入、计算 token 数，并确保与模型的令牌化过程一致。如果你正在用 Go 开发 AI 相关应用，这个包是一个非常实用的工具。
 
+8. 解析LLM resp json问题
+```json
+Initial response from LLM:
+```json
+{
+    "question": "how many namespace in the cluster?",
+    "thought": "To determine the number of namespaces in the Kubernetes cluster, I will use the 'kubectl' tool to list all namespaces. This will provide a count of the namespaces currently present in the cluster.",
+    "action": {
+        "name": "kubectl",
+        "input": "kubectl get namespaces --no-headers | wc -l"
+    }
+}
+```
+应该将LLM 返回的```json 处理掉``
+9. python -c 执行报错问题处理
+python 脚本需要k8s modules。
+解决：
+    - 使用虚拟环境，执行python 前使用cd ~/k8s/python-cli && source k8s-env/bin/activate 
+    - -c 脚本换行无法执行问题解决，
+   ```
+   // 替换内部双引号，避免冲突
+    escapedScript := strings.ReplaceAll(script, "\"", "\\\"")
+   ```

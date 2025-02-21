@@ -54,6 +54,8 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 	}
 
 	resp, err := client.Chat(model, maxTokens, chatHistory)
+	cleanedResp := cleanJSON(resp)
+	fmt.Println("after remove markdown  response:\n", cleanedResp)
 	if err != nil {
 		return "", chatHistory, fmt.Errorf("chat completion error: %v", err)
 	}
@@ -68,11 +70,13 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 	}
 
 	var toolPrompt tools.ToolPrompt
-	if err = json.Unmarshal([]byte(resp), &toolPrompt); err != nil {
+	if err = json.Unmarshal([]byte(cleanedResp), &toolPrompt); err != nil {
 		if verbose {
 			color.Cyan("Unable to parse tool from prompt, assuming got final answer.\n\n", resp)
+
+			color.Cyan("json marshal error: %s\n\n", err)
 		}
-		return resp, chatHistory, nil
+		return cleanedResp, chatHistory, nil
 	}
 
 	iterations := 0
@@ -168,4 +172,13 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 			}
 		}
 	}
+}
+
+func cleanJSON(input string) string {
+	// 清理 Markdown 标记
+	input = strings.TrimSpace(input)
+	input = strings.TrimPrefix(input, "```json")
+	input = strings.TrimPrefix(input, "```")
+	input = strings.TrimSuffix(input, "```")
+	return strings.TrimSpace(input)
 }

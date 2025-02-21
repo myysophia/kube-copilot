@@ -16,13 +16,22 @@ limitations under the License.
 package tools
 
 import (
+	"fmt"
+	"github.com/fatih/color"
 	"os/exec"
 	"strings"
 )
 
 // PythonREPL runs the given Python script and returns the output.
 func PythonREPL(script string) (string, error) {
-	cmd := exec.Command("python3", "-c", script)
+	//exec.Command("k8s-env")
+	//cmd := exec.Command("cd ~/k8s/python-cli && source k8s-env/bin/activate && python3", "-c", script)
+	//cmd := exec.Command("python3", "-c", script)
+	//color.Cyan("Python scripts is:%s", cmd)
+	escapedScript := strings.ReplaceAll(script, "\"", "\\\"")
+	cmdStr := fmt.Sprintf("cd ~/k8s/python-cli && source k8s-env/bin/activate && python3 -c \"%s\"", escapedScript)
+	cmd := exec.Command("bash", "-c", cmdStr)
+	color.Cyan("Python scripts is: %s", cmdStr)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -30,4 +39,16 @@ func PythonREPL(script string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+// SwitchK8sEnv 切换到指定的 Kubernetes 环境
+func SwitchK8sEnv(envName string) error {
+	// 假设 k8s-env 是一个命令，用于切换环境
+	cmd := exec.Command("k8s-env", "switch", envName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to switch to %s: %s, output: %s", envName, err, output)
+	}
+	fmt.Printf("Switched to %s: %s\n", envName, output)
+	return nil
 }
