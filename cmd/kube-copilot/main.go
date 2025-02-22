@@ -1,24 +1,23 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
 	// global flags
-	model         string
-	maxTokens     int
-	countTokens   bool
-	verbose       bool
-	maxIterations int
+	//model string
+	//maxTokens     int
+	//countTokens   bool
+	//verbose       bool
+	//maxIterations int
 
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
-		Use:     "kube-copilot",
+		Use:     "k8s-aiagent",
 		Version: VERSION,
-		Short:   "Kubernetes Copilot powered by OpenAI",
+		Short:   "Kubernetes Copilot powered by NOVA",
 	}
 )
 
@@ -34,7 +33,13 @@ func init() {
 }
 
 func main() {
+	// 初始化日志
+	initLogger()
+	defer logger.Sync()
+
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		logger.Fatal("命令执行失败",
+			zap.Error(err),
+		)
 	}
 }

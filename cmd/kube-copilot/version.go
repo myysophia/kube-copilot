@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	// VERSION is the version of kube-copilot.
-	VERSION = "v0.5.3"
+// VERSION is the version of kube-copilot.
+// VERSION = "v0.1.8"
 )
 
 var versionCmd = &cobra.Command{

@@ -1,5 +1,20 @@
 package tools
 
+import (
+	"fmt"
+	"go.uber.org/zap"
+)
+
+var logger *zap.Logger
+
+func init() {
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		panic(fmt.Sprintf("无法初始化日志: %v", err))
+	}
+}
+
 // Tool 是一个接受输入并返回输出的函数类型
 type Tool func(input string) (string, error)
 

@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fatih/color"
+	//"github.com/fatih/color"
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
 	"github.com/feiskyer/kube-copilot/pkg/tools"
 	kubetools "github.com/feiskyer/kube-copilot/pkg/tools"
@@ -25,6 +25,9 @@ import (
 	"github.com/feiskyer/kube-copilot/pkg/workflows"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
+	//"github.com/spf13/pflag"
+	//"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 const executeSystemPrompt = `As a technical expert in Kubernetes and cloud-native networking, your task follows a specific Chain of Thought methodology to ensure thoroughness and accuracy while adhering to the constraints provided.
@@ -62,7 +65,7 @@ const executeSystemPrompt_cn = `
 您是Kubernetes和云原生网络的技术专家，您的任务是遵循特定的链式思维方法，以确保在遵守约束的情况下实现彻底性和准确性。
 
 可用工具：
-- kubectl：用于执行 Kubernetes 命令。输入：一个独立的 kubectl 命令（例如 'get pods -o json'），不支持直接包含管道或后续处理命令。输出：命令的结果，通常为 JSON 或文本格式。如果运行“kubectl top”，使用“--sort-by=memory”或“--sort-by=cpu”排序。
+- kubectl：用于执行 Kubernetes 命令。输入：一个独立的 kubectl 命令（例如 'get pods -o json'），不支持直接包含管道或后续处理命令。输出：命令的结果，通常为 JSON 或文本格式。如果运行"kubectl top"，使用"--sort-by=memory"或"--sort-by=cpu"排序。
 - python：用于执行带有 Kubernetes Python SDK 的 Python 代码。输入：Python 脚本。输出：脚本的 stdout 和 stderr，使用 print(...) 输出结果。
 - trivy：用于扫描容器镜像中的漏洞。输入：镜像名称（例如 'nginx:latest'）。输出：漏洞报告。
 - jq：用于处理和查询 JSON 数据。输入：一个有效的 jq 表达式（例如 '-r .items[] | select(.metadata.name | test("iotdb")) | .spec.containers[].image'），需配合前一步的 JSON 输出使用。输出：查询结果。确保表达式针对 kubectl 返回的 JSON 结构设计，无需额外转义双引号（如 test("iotdb")）。
@@ -100,25 +103,53 @@ const executeSystemPrompt_cn = `
 `
 
 var instructions string
+var model string
+
+//var maxTokens int
+//var countTokens int
+//var verbose bool
+//var maxIterations int
+//var logger *logrus.Logger
 
 func init() {
 	tools.CopilotTools["trivy"] = kubetools.Trivy
 
 	executeCmd.PersistentFlags().StringVarP(&instructions, "instructions", "", "", "instructions to execute")
 	executeCmd.MarkFlagRequired("instructions")
+
+	executeCmd.PersistentFlags().StringVarP(&model, "model", "", "gpt-3.5-turbo", "model to use")
+	executeCmd.PersistentFlags().IntVarP(&maxTokens, "max-tokens", "", 1024, "max tokens for the model")
+	//executeCmd.PersistentFlags().IntVarP(&countTokens, "count-tokens", "", 1024, "count tokens for the model")
+	executeCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", false, "verbose output")
+	executeCmd.PersistentFlags().IntVarP(&maxIterations, "max-iterations", "", 10, "max iterations for the model")
+
+	//logger = logrus.New()
 }
 
 var executeCmd = &cobra.Command{
 	Use:   "execute",
 	Short: "Execute operations based on prompt instructions",
 	Run: func(cmd *cobra.Command, args []string) {
+		// 确保日志已初始化
+		if logger == nil {
+			initLogger()
+			defer logger.Sync()
+		}
+
 		if instructions == "" && len(args) > 0 {
 			instructions = strings.Join(args, " ")
 		}
 		if instructions == "" {
-			fmt.Println("Please provide the instructions")
+			logger.Fatal("执行失败",
+				zap.String("error", "缺少必要参数: instructions"),
+			)
 			return
 		}
+
+		logger.Info("开始执行指令",
+			zap.String("instructions", instructions),
+			zap.String("model", model),
+		)
 
 		messages := []openai.ChatCompletionMessage{
 			{
@@ -130,20 +161,40 @@ var executeCmd = &cobra.Command{
 				Content: fmt.Sprintf("Here are the instructions: %s", instructions),
 			},
 		}
+
+		logger.Debug("发送请求到 OpenAI",
+			zap.Any("messages", messages),
+			zap.Int("maxTokens", maxTokens),
+			zap.Bool("countTokens", countTokens),
+			zap.Bool("verbose", verbose),
+			zap.Int("maxIterations", maxIterations),
+		)
+
 		response, _, err := assistants.Assistant(model, messages, maxTokens, countTokens, verbose, maxIterations)
 		if err != nil {
-			color.Red(err.Error())
+			logger.Error("执行失败",
+				zap.Error(err),
+			)
 			return
 		}
 
-		instructions := fmt.Sprintf("Extract the execuation results for user instructions and reformat in a concise Markdown response: %s", response)
-		result, err := workflows.AssistantFlow(model, instructions, verbose)
+		logger.Debug("收到原始响应",
+			zap.String("response", response),
+		)
+
+		formatInstructions := fmt.Sprintf("Extract the execuation results for user instructions and reformat in a concise Markdown response: %s", response)
+		result, err := workflows.AssistantFlow(model, formatInstructions, verbose)
 		if err != nil {
-			color.Red(err.Error())
-			fmt.Println(response)
+			logger.Error("格式化结果失败",
+				zap.Error(err),
+				zap.String("raw_response", response),
+			)
 			return
 		}
 
+		logger.Info("执行完成",
+			zap.String("result", result),
+		)
 		utils.RenderMarkdown(result)
 	},
 }

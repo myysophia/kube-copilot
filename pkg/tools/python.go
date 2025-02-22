@@ -18,35 +18,60 @@ import (
 	"github.com/fatih/color"
 	"os/exec"
 	"strings"
+	"go.uber.org/zap"
 )
 
 // PythonREPL runs the given Python script and returns the output.
 func PythonREPL(script string) (string, error) {
-	//exec.Command("k8s-env")
-	//cmd := exec.Command("cd ~/k8s/python-cli && source k8s-env/bin/activate && python3", "-c", script)
-	//cmd := exec.Command("python3", "-c", script)
-	//color.Cyan("Python scripts is:%s", cmd)
+	logger.Debug("准备执行 Python 脚本",
+		zap.String("script", script),
+	)
+
 	escapedScript := strings.ReplaceAll(script, "\"", "\\\"")
 	cmdStr := fmt.Sprintf("cd ~/k8s/python-cli && source k8s-env/bin/activate && python3 -c \"%s\"", escapedScript)
 	cmd := exec.Command("bash", "-c", cmdStr)
+	
+	logger.Debug("构建命令",
+		zap.String("command", cmdStr),
+	)
 	color.Cyan("Python scripts is: %s", cmdStr)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		logger.Error("Python 脚本执行失败",
+			zap.Error(err),
+			zap.String("output", string(output)),
+		)
 		return strings.TrimSpace(string(output)), err
 	}
 
+	logger.Debug("Python 脚本执行成功",
+		zap.String("output", string(output)),
+	)
 	return strings.TrimSpace(string(output)), nil
 }
 
 // SwitchK8sEnv 切换到指定的 Kubernetes 环境
 func SwitchK8sEnv(envName string) error {
-	// 假设 k8s-env 是一个命令，用于切换环境
+	logger.Info("切换 Kubernetes 环境",
+		zap.String("environment", envName),
+	)
+
 	cmd := exec.Command("k8s-env", "switch", envName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		logger.Error("环境切换失败",
+			zap.String("environment", envName),
+			zap.Error(err),
+			zap.String("output", string(output)),
+		)
 		return fmt.Errorf("failed to switch to %s: %s, output: %s", envName, err, output)
 	}
+
+	logger.Info("环境切换成功",
+		zap.String("environment", envName),
+		zap.String("output", string(output)),
+	)
 	fmt.Printf("Switched to %s: %s\n", envName, output)
 	return nil
 }
