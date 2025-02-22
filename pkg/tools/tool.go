@@ -13,8 +13,8 @@ var CopilotTools = map[string]Tool{
 
 // ToolPrompt 定义了与 LLM 交互的 JSON 格式
 type ToolPrompt struct {
-	Question string `json:"question"` // 用户输入的问题
-	Thought  string `json:"thought"`  // AI 的思考过程
+	Question string   `json:"question"` // 用户输入的问题
+	Thought  string   `json:"thought"`  // AI 的思考过程
 	Action   struct { // 需要执行的动作
 		Name  string `json:"name"`  // 工具名称
 		Input string `json:"input"` // 工具输入

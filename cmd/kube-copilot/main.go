@@ -30,12 +30,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.PersistentFlags().IntVarP(&maxIterations, "max-iterations", "x", 10, "Max iterations for the agent running")
 
-	rootCmd.AddCommand(analyzeCmd)
-	rootCmd.AddCommand(auditCmd)
-	rootCmd.AddCommand(diagnoseCmd)
-	rootCmd.AddCommand(generateCmd)
-	rootCmd.AddCommand(executeCmd)
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(serverCmd)
 }
 
 func main() {
