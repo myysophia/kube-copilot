@@ -61,14 +61,13 @@ Use this JSON format for responses:
 }
 `
 
-const executeSystemPrompt_cn = `
-您是Kubernetes和云原生网络的技术专家，您的任务是遵循特定的链式思维方法，以确保在遵守约束的情况下实现彻底性和准确性。
+const executeSystemPrompt_cn = `您是Kubernetes和云原生网络的技术专家，您的任务是遵循特定的链式思维方法，以确保在遵守约束的情况下实现彻底性和准确性。
 
 可用工具：
 - kubectl：用于执行 Kubernetes 命令。输入：一个独立的 kubectl 命令（例如 'get pods -o json'），不支持直接包含管道或后续处理命令。输出：命令的结果，通常为 JSON 或文本格式。如果运行"kubectl top"，使用"--sort-by=memory"或"--sort-by=cpu"排序。
 - python：用于执行带有 Kubernetes Python SDK 的 Python 代码。输入：Python 脚本。输出：脚本的 stdout 和 stderr，使用 print(...) 输出结果。
 - trivy：用于扫描容器镜像中的漏洞。输入：镜像名称（例如 'nginx:latest'）。输出：漏洞报告。
-- jq：用于处理和查询 JSON 数据。输入：一个有效的 jq 表达式（例如 '-r .items[] | select(.metadata.name | test("iotdb")) | .spec.containers[].image'），需配合前一步的 JSON 输出使用。输出：查询结果。确保表达式针对 kubectl 返回的 JSON 结构设计，无需额外转义双引号（如 test("iotdb")）。
+- jq：用于处理和查询 JSON 数据。输入：一个有效的 jq 表达式（例如 '-r .items[] | select(.metadata.name | test("iotdb")) | .spec.containers[].image'），需配合前一步的 JSON 输出使用。输出：查询结果。确保表达式针对 kubectl 返回的 JSON 结构设计。
 
 您采取的步骤如下：
 1. 问题识别：清楚定义问题，描述观察到的症状或目标。
@@ -78,7 +77,15 @@ const executeSystemPrompt_cn = `
 5. 可行解决方案：提出可执行的解决方案，优先使用 kubectl 命令。若涉及多步操作，说明顺序和预期结果。对于 trivy 识别的漏洞，基于最佳实践提供补救建议。
 6. 应急方案：如果工具不可用或命令失败，提供替代方法（如分步执行替代管道操作），确保仍能推进故障排除。
 
-响应格式：
+约束：
+- 优先使用 kubectl 获取数据，配合 jq 处理 JSON，单步执行优先。
+- 如果需要组合 kubectl 和 jq，应分步执行：先用 kubectl 获取 JSON，再用 jq 过滤或查询。
+- 避免将管道命令（如 'kubectl get pods -o json | jq ...'）作为单一输入，除非工具链明确支持 shell 管道并以 shell 模式执行。
+- 确保每步操作在单次 action 中完成（如获取 Pod 和提取镜像版本分两步），无需用户手动干预。
+- 禁止安装操作，所有步骤在现有工具约束内完成。
+
+重要提示：您必须始终使用以下 JSON 格式返回响应。不要直接返回 Markdown 文本。所有格式化的文本都应该放在 final_answer 字段中：
+
 {
 	"question": "<输入问题>",
 	"thought": "<思维过程>",
@@ -87,20 +94,11 @@ const executeSystemPrompt_cn = `
 		"input": "<工具输入，确保包含所有必要上下文>"
 	},
 	"observation": "<工具执行结果，由外部填充>",
-	"final_answer": "<最终答案，仅在完成所有步骤且无需后续行动时设置>"
+	"final_answer": "<最终答案，使用清晰的 Markdown 格式，包含适当的标题、列表和代码块。对于执行结果，提供简洁的总结和必要的解释。使用中文回答。>"
 }
 
-约束：
-- 优先使用 kubectl 获取数据，配合 jq 处理 JSON，单步执行优先。
-- 如果需要组合 kubectl 和 jq，应分步执行：先用 kubectl 获取 JSON，再用 jq 过滤或查询。
-- 避免将管道命令（如 'kubectl get pods -o json | jq ...'）作为单一输入，除非工具链明确支持 shell 管道并以 shell 模式执行。
-- 确保每步操作在单次 action 中完成（如获取 Pod 和提取镜像版本分两步），无需用户手动干预。
-- 禁止安装操作，所有步骤在现有工具约束内完成。
-- jq 表达式使用自然语法，双引号无需转义（如 test("iotdb") 或 contains("iotdb")）。
-
 目标：
-在 Kubernetes 和云原生网络领域内识别问题根本原因，提供清晰、可行的解决方案，同时保持诊断和故障排除的运营约束。
-`
+在 Kubernetes 和云原生网络领域内识别问题根本原因，提供清晰、可行的解决方案，同时保持诊断和故障排除的运营约束。`
 
 var instructions string
 var model string
@@ -120,7 +118,7 @@ func init() {
 	executeCmd.PersistentFlags().StringVarP(&model, "model", "", "gpt-3.5-turbo", "model to use")
 	executeCmd.PersistentFlags().IntVarP(&maxTokens, "max-tokens", "", 1024, "max tokens for the model")
 	//executeCmd.PersistentFlags().IntVarP(&countTokens, "count-tokens", "", 1024, "count tokens for the model")
-	executeCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", false, "verbose output")
+	executeCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", true, "verbose output")
 	executeCmd.PersistentFlags().IntVarP(&maxIterations, "max-iterations", "", 10, "max iterations for the model")
 
 	//logger = logrus.New()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,6 @@ import (
 	"time"
 
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
-	"github.com/feiskyer/kube-copilot/pkg/workflows"
 )
 
 var (
@@ -59,10 +59,24 @@ type AnalyzeRequest struct {
 }
 
 type ExecuteRequest struct {
-	Command string `json:"command" binding:"required"`
-	Args    string `json:"args" binding:"required"`
-	Model   string `json:"model"`
-	Cluster string `json:"cluster"`
+	Instructions   string   `json:"instructions" binding:"required"`
+	Args           string   `json:"args" binding:"required"`
+	Provider       string   `json:"provider"`
+	BaseUrl        string   `json:"baseUrl"`
+	CurrentModel   string   `json:"currentModel"`
+	Cluster        string   `json:"cluster"`
+	SelectedModels []string `json:"selectedModels"`
+}
+
+type AIResponse struct {
+	Question string `json:"question"`
+	Thought  string `json:"thought"`
+	Action   struct {
+		Name  string `json:"name"`
+		Input string `json:"input"`
+	} `json:"action"`
+	Observation string `json:"observation"`
+	FinalAnswer string `json:"final_answer"`
 }
 
 // initLogger 初始化 Zap 日志配置
@@ -109,6 +123,7 @@ func jwtAuth() gin.HandlerFunc {
 
 // setupRouter configures the Gin router with all endpoints
 func setupRouter() *gin.Engine {
+	verbose = true
 	r := gin.Default()
 
 	// 配置 CORS
@@ -248,10 +263,13 @@ func setupRouter() *gin.Engine {
 		})
 
 		protected.POST("/execute", func(c *gin.Context) {
-			// 打印原始请求数据
-			logger.Debug("Execute 接口收到请求",
-				zap.Any("body", c.Request.Body),
-			)
+			// 获取 API Key
+			apiKey := c.GetHeader("X-API-Key")
+			if apiKey == "" {
+				logger.Error("缺少 API Key")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Missing API Key"})
+				return
+			}
 
 			var req ExecuteRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -262,32 +280,42 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			logger.Debug("Execute 请求解析成功",
-				zap.Any("request", req),
+			// 打印请求数据（不包含敏感信息）
+			logger.Debug("Execute 接口收到请求",
+				zap.String("instructions", req.Instructions),
+				zap.String("args", req.Args),
+				zap.String("provider", req.Provider),
+				zap.String("baseUrl", req.BaseUrl),
+				zap.String("currentModel", req.CurrentModel),
+				zap.Strings("selectedModels", req.SelectedModels),
+				zap.String("cluster", req.Cluster),
+				zap.String("apiKey", "***"), // 不记录实际的 API Key
 			)
 
-			// 使用请求中的 model 和 cluster，如果没有则使用默认值
-			executeModel := req.Model
+			// 使用请求中的 model，如果没有则使用默认值
+			executeModel := req.CurrentModel
 			if executeModel == "" {
 				executeModel = "gpt-4"
 			}
 
 			// 构建执行指令
-			instructions := req.Command
+			instructions := req.Instructions
 			if req.Args != "" {
-				instructions = fmt.Sprintf("%s %s", req.Command, req.Args)
+				instructions = fmt.Sprintf("%s %s", req.Instructions, req.Args)
 			}
 
 			logger.Debug("Execute 执行参数",
 				zap.String("model", executeModel),
 				zap.String("instructions", instructions),
+				zap.String("baseUrl", req.BaseUrl),
+				zap.String("cluster", req.Cluster),
 			)
 
 			// 构建 OpenAI 消息
 			messages := []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: executeSystemPrompt_cn, // 使用中文版系统提示
+					Content: executeSystemPrompt, // 在系统提示中加入格式化要求
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
@@ -296,7 +324,7 @@ func setupRouter() *gin.Engine {
 			}
 
 			// 执行指令
-			response, _, err := assistants.Assistant(executeModel, messages, maxTokens, countTokens, verbose, maxIterations)
+			response, _, err := assistants.AssistantWithConfig(executeModel, messages, maxTokens, countTokens, verbose, maxIterations, apiKey, req.BaseUrl)
 			if err != nil {
 				logger.Error("Execute 执行失败",
 					zap.Error(err),
@@ -307,14 +335,14 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			// 格式化结果
-			formatInstructions := fmt.Sprintf("Extract the execuation results for user instructions and reformat in a concise Markdown response: %s", response)
-			result, err := workflows.AssistantFlow(executeModel, formatInstructions, verbose)
-			if err != nil {
-				logger.Error("Execute 结果格式化失败",
+			// 解析 JSON 响应
+			var aiResp AIResponse
+			if err := json.Unmarshal([]byte(response), &aiResp); err != nil {
+				logger.Debug("响应不是 JSON 格式，作为最终答案处理",
 					zap.Error(err),
-					zap.String("raw_response", response),
+					zap.String("response", response),
 				)
+				// 直接返回非 JSON 响应作为最终答案
 				c.JSON(http.StatusOK, gin.H{
 					"message": response,
 					"status":  "success",
@@ -322,10 +350,18 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			c.JSON(http.StatusOK, gin.H{
-				"message": result,
-				"status":  "success",
-			})
+			// 只有当有最终答案时才返回
+			if aiResp.FinalAnswer != "" {
+				c.JSON(http.StatusOK, gin.H{
+					"message": aiResp.FinalAnswer,
+					"status":  "success",
+				})
+			} else {
+				c.JSON(http.StatusOK, gin.H{
+					"message": "指令正在执行中，请稍候...",
+					"status":  "processing",
+				})
+			}
 		})
 	}
 

@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -36,14 +35,14 @@ type OpenAIClient struct {
 
 // NewOpenAIClient 创建新的 OpenAI 客户端
 // 支持标准 OpenAI API 和 Azure OpenAI API
-func NewOpenAIClient() (*OpenAIClient, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
+func NewOpenAIClient(apiKey string, baseURL string) (*OpenAIClient, error) {
+	//apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY is not set")
 	}
 
 	config := openai.DefaultConfig(apiKey)
-	baseURL := os.Getenv("OPENAI_API_BASE")
+	//baseURL := os.Getenv("OPENAI_API_BASE")
 	if baseURL != "" {
 		config.BaseURL = baseURL
 
@@ -78,6 +77,7 @@ func (c *OpenAIClient) Chat(model string, maxTokens int, prompts []openai.ChatCo
 	backoff := c.Backoff
 	for try := 0; try < c.Retries; try++ {
 		resp, err := c.Client.CreateChatCompletion(context.Background(), req)
+
 		if err == nil {
 			return string(resp.Choices[0].Message.Content), nil
 		}

@@ -3,10 +3,24 @@ package workflows
 import (
 	"context"
 	"fmt"
+	"github.com/feiskyer/kube-copilot/pkg/assistants"
+	"github.com/sashabaranov/go-openai"
+	"go.uber.org/zap"
 	"os"
 
 	"github.com/feiskyer/swarm-go"
 )
+
+var logger *zap.Logger
+
+func init() {
+	var err error
+	config := zap.NewDevelopmentConfig()
+	logger, err = config.Build()
+	if err != nil {
+		panic(fmt.Sprintf("无法初始化日志: %v", err))
+	}
+}
 
 const assistantPrompt = `As a Kubernetes expert, guide the user according to the given instructions to solve their problem or achieve their objective.
 
@@ -30,9 +44,7 @@ Provide a concise Markdown response in a clear, logical order. Each step should 
 - Use precise terminology and include explanations only as needed based on the complexity of the task.
 - Ensure instructions are applicable across major cloud providers (GKE, EKS, AKS) unless specified otherwise.`
 
-const assistantPrompt_cn = `翻译为中文：
-
-作为Kubernetes专家，根据给定的指示指导用户解决问题或实现他们的目标。
+const assistantPrompt_cn = `作为Kubernetes专家，根据给定的指示指导用户解决问题或实现他们的目标。
 
 理解他们请求的本质，澄清任何复杂的概念，并提供针对其特定需求量身定制的逐步指南。确保您的解释是全面的，使用精确的Kubernetes术语和概念。
 
@@ -52,7 +64,7 @@ const assistantPrompt_cn = `翻译为中文：
 
 - 假设用户具有基本的Kubernetes知识。
 - 使用精确的术语，并仅根据任务的复杂性需要进行解释。
-- 除非另有说明，否则确保指示适用于主要云提供商（GKE、EKS、AKS）。`
+- 除非另有说明，否则确保指示适用于主要云提供商（ACK、EKS、CCE）。`
 
 // AssistantFlow runs a simple workflow by following the given instructions.
 func AssistantFlow(model string, instructions string, verbose bool) (string, error) {
@@ -87,5 +99,49 @@ func AssistantFlow(model string, instructions string, verbose bool) (string, err
 		return "", err
 	}
 
+	return result, nil
+}
+
+// AssistantFlowWithConfig 是支持自定义配置的简单工作流
+func AssistantFlowWithConfig(model string, input string, verbose bool, apiKey string, baseUrl string) (string, error) {
+	if logger == nil {
+		// 如果 logger 还没有初始化，进行初始化
+		config := zap.NewDevelopmentConfig()
+		var err error
+		logger, err = config.Build()
+		if err != nil {
+			return "", fmt.Errorf("初始化日志失败: %v", err)
+		}
+	}
+
+	logger.Info("开始执行 AssistantFlowWithConfig",
+		zap.String("model", model),
+		zap.String("input", input),
+		zap.Bool("verbose", verbose),
+		zap.String("baseUrl", baseUrl),
+	)
+
+	messages := []openai.ChatCompletionMessage{
+		{
+			Role:    openai.ChatMessageRoleSystem,
+			Content: assistantPrompt_cn, // 使用中文版系统提示
+		},
+		{
+			Role:    openai.ChatMessageRoleUser,
+			Content: input,
+		},
+	}
+
+	result, _, err := assistants.AssistantWithConfig(model, messages, 2048, false, verbose, 10, apiKey, baseUrl)
+	if err != nil {
+		logger.Error("助手执行失败",
+			zap.Error(err),
+		)
+		return "", fmt.Errorf("assistant error: %v", err)
+	}
+
+	logger.Info("工作流执行完成",
+		zap.String("result", result),
+	)
 	return result, nil
 }
