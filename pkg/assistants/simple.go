@@ -487,5 +487,18 @@ func cleanJSON(input string) string {
 	input = strings.TrimPrefix(input, "```json")
 	input = strings.TrimPrefix(input, "```")
 	input = strings.TrimSuffix(input, "```")
+	
+	// 尝试解析和重新格式化 JSON
+	var temp interface{}
+	if err := json.Unmarshal([]byte(input), &temp); err == nil {
+		if cleanBytes, err := json.Marshal(temp); err == nil {
+			return string(cleanBytes)
+		}
+	}
+	
+	// 如果 JSON 解析失败，进行基本的清理
+	input = strings.ReplaceAll(input, "\n", " ")
+	input = strings.ReplaceAll(input, "\r", " ")
+	input = regexp.MustCompile(`\s+`).ReplaceAllString(input, " ")
 	return strings.TrimSpace(input)
 }
