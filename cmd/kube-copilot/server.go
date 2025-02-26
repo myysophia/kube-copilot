@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
@@ -25,8 +26,8 @@ var (
 	logger *zap.Logger
 
 	// Execute flags (从 execute.go 同步)
-	maxTokens     = 2048
-	countTokens   = false
+	maxTokens     = 204800
+	countTokens   = true
 	verbose       = true
 	maxIterations = 10
 )
@@ -128,7 +129,7 @@ func setupRouter() *gin.Engine {
 
 	// 配置 CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-OpenAI-Key", "X-API-Key", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
@@ -300,7 +301,7 @@ func setupRouter() *gin.Engine {
 
 			// 构建执行指令
 			instructions := req.Instructions
-			if req.Args != "" {
+			if req.Args != "" && !strings.Contains(instructions, req.Args) {
 				instructions = fmt.Sprintf("%s %s", req.Instructions, req.Args)
 			}
 
@@ -319,7 +320,7 @@ func setupRouter() *gin.Engine {
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: fmt.Sprintf("Here are the instructions: %s", instructions),
+					Content: instructions, // 直接使用处理后的instructions，不再添加前缀
 				},
 			}
 
@@ -342,6 +343,22 @@ func setupRouter() *gin.Engine {
 					zap.Error(err),
 					zap.String("response", response),
 				)
+
+				// 尝试从非标准JSON中提取final_answer
+				var genericResp map[string]interface{}
+				if err2 := json.Unmarshal([]byte(response), &genericResp); err2 == nil {
+					if finalAnswer, ok := genericResp["final_answer"].(string); ok && finalAnswer != "" {
+						logger.Debug("从非标准JSON中提取到final_answer",
+							zap.String("final_answer", finalAnswer),
+						)
+						c.JSON(http.StatusOK, gin.H{
+							"message": finalAnswer,
+							"status":  "success",
+						})
+						return
+					}
+				}
+
 				// 直接返回非 JSON 响应作为最终答案
 				c.JSON(http.StatusOK, gin.H{
 					"message": response,

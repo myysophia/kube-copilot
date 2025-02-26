@@ -385,3 +385,46 @@ python 脚本需要k8s modules。
    // 替换内部双引号，避免冲突
     escapedScript := strings.ReplaceAll(script, "\"", "\\\"")
    ```
+   
+10. 优化tool 提升性能和节省token
+```json
+Iteration 3): executing tool kubectl
+Invoking kubectl tool with inputs: 
+============
+get pods -n velero -o json | jq '.items[] | {name: .metadata.name, labels: .metadata.labels, image: .spec.containers[].image, startTime: .status.startTime}'
+============
+
+{"level":"error","ts":1740364948.37477,"caller":"tools/kubectl.go:27","msg":"kubectl 命令执行失败","error":"exit status 1","output":"{\n    \"apiVersion\": \"v1\",\n    \"items\": [],\n    \"kind\": \"List\",\n    \"metadata\": {\n        \"resourceVersion\": \"\"\n    }\n}\nError from server (NotFound): pods \"|\" not found\nError from server (NotFound): pods \"jq\" not found\nError from server (NotFound): pods \"'.items[]\" not found\nError from server (NotFound): pods \"|\" not found\nError from server (NotFound): pods \"{name:\" not found\nError from server (NotFound): pods \".metadata.name,\" not found\nError from server (NotFound): pods \"labels:\" not found\nError from server (NotFound): pods \".metadata.labels,\" not found\nError from server (NotFound): pods \"image:\" not found\nError from server (NotFound): pods \".spec.containers[].image,\" not found\nError from server (NotFound): pods \"startTime:\" not found\nError from server (NotFound): pods \".status.startTime}'\" not found\n","stacktrace":"github.com/feiskyer/kube-copilot/pkg/tools.Kubectl\n\t/Users/ninesun/GolandProjects/kube-copilot/pkg/tools/kubectl.go:27\ngithub.com/feiskyer/kube-copilot/pkg/assistants.AssistantWithConfig\n\t/Users/ninesun/GolandProjects/kube-copilot/pkg/assistants/simple.go:397\nmain.setupRouter.func7\n\t/Users/ninesun/GolandProjects/kube-copilot/cmd/kube-copilot/server.go:327\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\nmain.jwtAuth.func1\n\t/Users/ninesun/GolandProjects/kube-copilot/cmd/kube-copilot/server.go:120\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\nmain.setupRouter.func1\n\t/Users/ninesun/GolandProjects/kube-copilot/cmd/kube-copilot/server.go:161\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.CustomRecoveryWithWriter.func1\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.LoggerWithConfig.func1\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/logger.go:249\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.(*Engine).handleHTTPRequest\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633\ngithub.com/gin-gonic/gin.(*Engine).ServeHTTP\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589\nnet/http.serverHandler.ServeHTTP\n\t/Users/ninesun/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/net/http/server.go:3210\nnet/http.(*conn).serve\n\t/Users/ninesun/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/net/http/server.go:2092"}
+{"level":"error","ts":1740364948.375137,"caller":"assistants/simple.go:400","msg":"工具执行失败","tool":"kubectl","error":"exit status 1","stacktrace":"github.com/feiskyer/kube-copilot/pkg/assistants.AssistantWithConfig\n\t/Users/ninesun/GolandProjects/kube-copilot/pkg/assistants/simple.go:400\nmain.setupRouter.func7\n\t/Users/ninesun/GolandProjects/kube-copilot/cmd/kube-copilot/server.go:327\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\nmain.jwtAuth.func1\n\t/Users/ninesun/GolandProjects/kube-copilot/cmd/kube-copilot/server.go:120\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\nmain.setupRouter.func1\n\t/Users/ninesun/GolandProjects/kube-copilot/cmd/kube-copilot/server.go:161\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.CustomRecoveryWithWriter.func1\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/recovery.go:102\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.LoggerWithConfig.func1\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/logger.go:249\ngithub.com/gin-gonic/gin.(*Context).Next\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/context.go:185\ngithub.com/gin-gonic/gin.(*Engine).handleHTTPRequest\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:633\ngithub.com/gin-gonic/gin.(*Engine).ServeHTTP\n\t/Users/ninesun/go/pkg/mod/github.com/gin-gonic/gin@v1.10.0/gin.go:589\nnet/http.serverHandler.ServeHTTP\n\t/Users/ninesun/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/net/http/server.go:3210\nnet/http.(*conn).serve\n\t/Users/ninesun/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/net/http/server.go:2092"}
+2025/02/24 10:42:28 encoding for model: no encoding for model qwen-plus
+2025/02/24 10:42:28 encoding for model: no encoding for model qwen-plus
+Observation: Tool kubectl failed with error {
+    "apiVersion": "v1",
+    "items": [],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}
+Error from server (NotFound): pods "|" not found
+Error from server (NotFound): pods "jq" not found
+Error from server (NotFound): pods "'.items[]" not found
+Error from server (NotFound): pods "|" not found
+Error from server (NotFound): pods "{name:" not found
+Error from server (NotFound): pods ".metadata.name," not found
+Error from server (NotFound): pods "labels:" not found
+Error from server (NotFound): pods ".metadata.labels," not found
+Error from server (NotFound): pods "image:" not found
+Error from server (NotFound): pods ".spec.containers[].image," not found
+Error from server (NotFound): pods "startTime:" not found
+Error from server (NotFound): pods ".status.startTime}'" not found. Considering refine the inputs for the tool.
+
+```
+cmd := exec.Command("kubectl", strings.Split(command, " ")...)
+这个函数使用 Go 的 exec.Command 执行 kubectl 命令，假设命令以空格分隔为参数。
+它不支持管道（|）或 shell 特定的语法（如 grep），因为 exec.Command 是直接调用 kubectl 的子进程，而非 shell 环境。
+
+## prompt 优化
+### 避免全量输出-o json 或者-o yaml
+
+kubectl get pods -n velero -o json

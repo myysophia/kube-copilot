@@ -248,6 +248,18 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 				logger.Info("完成总结",
 					zap.String("summary", resp),
 				)
+				
+				// 尝试从响应中提取final_answer
+				var finalResponse map[string]interface{}
+				if err := json.Unmarshal([]byte(resp), &finalResponse); err == nil {
+					if finalAnswer, ok := finalResponse["final_answer"].(string); ok && finalAnswer != "" {
+						logger.Info("成功提取final_answer",
+							zap.String("final_answer", finalAnswer),
+						)
+						return finalAnswer, chatHistory, nil
+					}
+				}
+				
 				return resp, chatHistory, nil
 			}
 		}
@@ -419,6 +431,8 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				color.Cyan("Observation: %s\n\n", observation)
 			}
 
+			// Constrict the prompt to the max tokens allowed by the model.
+			// This is required because the tool may have generated a long output.
 			observation = llms.ConstrictPrompt(observation, model, 1024)
 			toolPrompt.Observation = observation
 			assistantMessage, _ := json.Marshal(toolPrompt)
@@ -426,8 +440,11 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				Role:    openai.ChatMessageRoleUser,
 				Content: string(assistantMessage),
 			})
+			// Constrict the chat history to the max tokens allowed by the model.
+			// This is required because the chat history may have grown too large.
 			chatHistory = llms.ConstrictMessages(chatHistory, model, maxTokens)
 
+			// Start next iteration of LLM chat.
 			if verbose {
 				color.Blue("Iteration %d): chatting with LLM\n", iterations)
 			}
@@ -475,6 +492,18 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				logger.Info("完成总结",
 					zap.String("summary", resp),
 				)
+				
+				// 尝试从响应中提取final_answer
+				var finalResponse map[string]interface{}
+				if err := json.Unmarshal([]byte(resp), &finalResponse); err == nil {
+					if finalAnswer, ok := finalResponse["final_answer"].(string); ok && finalAnswer != "" {
+						logger.Info("成功提取final_answer",
+							zap.String("final_answer", finalAnswer),
+						)
+						return finalAnswer, chatHistory, nil
+					}
+				}
+				
 				return resp, chatHistory, nil
 			}
 		}

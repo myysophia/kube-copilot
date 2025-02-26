@@ -24,6 +24,7 @@ var CopilotTools = map[string]Tool{
 	"python":  PythonREPL,
 	"trivy":   Trivy,
 	"kubectl": Kubectl,
+	"jq":      JQ,
 }
 
 // ToolPrompt 定义了与 LLM 交互的 JSON 格式

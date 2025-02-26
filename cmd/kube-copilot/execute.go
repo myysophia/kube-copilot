@@ -59,6 +59,7 @@ Use this JSON format for responses:
 	"observation": "<result of the action, set by external tools>",
 	"final_answer": "<your final findings, only set after completed all processes and no action is required>"
 }
+note: please always use chinese reply
 `
 
 const executeSystemPrompt_cn = `您是Kubernetes和云原生网络的技术专家，您的任务是遵循特定的链式思维方法，以确保在遵守约束的情况下实现彻底性和准确性。
