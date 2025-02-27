@@ -316,7 +316,7 @@ func setupRouter() *gin.Engine {
 			messages := []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: executeSystemPrompt, // 在系统提示中加入格式化要求
+					Content: executeSystemPrompt_cn, // 在系统提示中加入格式化要求
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
