@@ -7,7 +7,12 @@ import (
 	"strings"
 )
 
-// 执行shell命令（支持管道）
+// executeShellCommand 执行shell命令并返回输出
+// 参数：
+//   - command: 要执行的shell命令
+// 返回：
+//   - string: 命令执行的输出
+//   - error: 执行过程中的错误
 func executeShellCommand(command string) (string, error) {
 	logger.Debug("执行shell命令",
 		zap.String("command", command),
@@ -26,32 +31,41 @@ func executeShellCommand(command string) (string, error) {
 	return string(output), nil
 }
 
-// Kubectl runs the given kubectl command and returns the output.
+// Kubectl 执行kubectl命令并返回结果
+// 支持以下特性：
+// 1. 自动处理带管道的复杂命令
+// 2. 支持引号和特殊字符
+// 3. 智能判断命令类型并选择合适的执行方式
+// 参数：
+//   - command: kubectl命令（可以包含或不包含"kubectl"前缀）
+// 返回：
+//   - string: 命令执行的输出
+//   - error: 执行过程中的错误
 func Kubectl(command string) (string, error) {
 	logger.Debug("准备执行 kubectl 命令",
 		zap.String("raw_command", command),
 	)
 
-	// 移除开头的 kubectl
+	// 移除开头的 kubectl 前缀（如果存在）
 	if strings.HasPrefix(command, "kubectl") {
 		command = strings.TrimSpace(strings.TrimPrefix(command, "kubectl"))
 	}
 
-	// 检查命令是否包含管道操作符或其他shell特殊字符
+	// 检查命令是否包含shell特殊字符
+	// 如果包含，需要使用shell执行以支持这些特性
 	if strings.Contains(command, "|") ||
 		strings.Contains(command, ">") ||
 		strings.Contains(command, "<") ||
 		strings.Contains(command, ";") ||
 		strings.Contains(command, "&&") ||
 		strings.Contains(command, "||") {
-		// 使用shell执行完整命令
 		logger.Debug("检测到shell特殊字符，使用shell执行",
 			zap.String("command", "kubectl "+command),
 		)
 		return executeShellCommand("kubectl " + command)
 	}
 
-	// 检查命令是否包含引号，这可能表示复杂参数
+	// 检查命令是否包含引号（通常表示复杂参数）
 	if strings.Contains(command, "\"") || strings.Contains(command, "'") {
 		logger.Debug("检测到引号，使用shell执行",
 			zap.String("command", "kubectl "+command),
@@ -60,11 +74,12 @@ func Kubectl(command string) (string, error) {
 	}
 
 	// 对于简单命令，使用exec.Command直接执行
+	// 这种方式更安全，且避免了shell解释的开销
 	logger.Debug("使用exec.Command执行简单命令",
 		zap.String("command", command),
 	)
 
-	// 使用Fields而不是Split来正确处理多个空格
+	// 使用Fields分割命令，可以正确处理多个空格
 	args := strings.Fields(command)
 	cmd := exec.Command("kubectl", args...)
 	output, err := cmd.CombinedOutput()
@@ -87,41 +102,52 @@ func processJSONOutput(output string) (string, error) {
 	return executeShellCommand(fmt.Sprintf("echo '%s' | %s", output, jqCmd))
 }
 
-// 智能资源查询函数
+// SmartResourceQuery 智能查询Kubernetes资源
+// 功能特性：
+// 1. 支持模糊匹配资源名称
+// 2. 自动处理命名空间
+// 3. 根据结果数量返回不同详细程度的信息
+// 4. 智能降级搜索（当精确匹配失败时尝试更宽泛的搜索）
+// 参数：
+//   - resourceName: 要查询的资源名称（支持模糊匹配）
+// 返回：
+//   - string: 查询结果
+//   - error: 查询过程中的错误
 func SmartResourceQuery(resourceName string) (string, error) {
 	logger.Debug("执行智能资源查询",
 		zap.String("resourceName", resourceName),
 	)
 
-	// 移除可能的引号
+	// 清理输入，移除可能的引号
 	resourceName = strings.Trim(resourceName, "\"'")
 
-	// 构建查询命令 - 先查找所有可能的资源类型
+	// 构建初始查询命令
+	// 查找多种资源类型，支持跨命名空间
 	command := fmt.Sprintf("kubectl get deployment,statefulset,daemonset,pod,service,configmap,secret -A -o name | grep -i \"%s\"", resourceName)
 
 	// 执行查询
 	result, err := executeShellCommand(command)
 	if err != nil {
-		// 如果没有找到匹配项，尝试更宽泛的搜索
+		// 如果精确匹配失败，尝试更宽泛的搜索
 		if strings.Contains(string(result), "No resources found") || result == "" {
 			logger.Debug("未找到精确匹配，尝试更宽泛搜索")
-			// 尝试使用部分名称匹配
+			// 使用资源名称的第一部分进行搜索
 			command = fmt.Sprintf("kubectl get all -A -o name | grep -i \"%s\"",
-				strings.Split(resourceName, "-")[0]) // 使用第一个连字符前的部分
+				strings.Split(resourceName, "-")[0])
 			return executeShellCommand(command)
 		}
 		return result, err
 	}
 
-	// 如果找到了资源，获取更详细的信息
+	// 处理查询结果
 	if result != "" {
 		lines := strings.Split(strings.TrimSpace(result), "\n")
 		if len(lines) == 1 {
-			// 只找到一个资源，获取详细信息
+			// 只找到一个资源，返回详细信息
 			resourceType := strings.Split(lines[0], "/")[0]
 			name := strings.Split(lines[0], "/")[1]
 
-			// 提取命名空间（如果有）
+			// 处理命名空间信息
 			namespace := ""
 			if strings.Contains(lines[0], ".") {
 				parts := strings.Split(name, ".")
@@ -149,7 +175,7 @@ func SmartResourceQuery(resourceName string) (string, error) {
 				resourceType := strings.Split(line, "/")[0]
 				name := strings.Split(line, "/")[1]
 
-				// 提取命名空间（如果有）
+				// 处理命名空间信息
 				namespace := ""
 				if strings.Contains(name, ".") {
 					parts := strings.Split(name, ".")
@@ -157,7 +183,7 @@ func SmartResourceQuery(resourceName string) (string, error) {
 					namespace = parts[1]
 				}
 
-				// 构建详细查询命令
+				// 获取资源的基本信息
 				detailCommand := fmt.Sprintf("kubectl get %s %s", resourceType, name)
 				if namespace != "" {
 					detailCommand += " -n " + namespace

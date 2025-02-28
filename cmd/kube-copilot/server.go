@@ -264,7 +264,7 @@ func setupRouter() *gin.Engine {
 		})
 
 		protected.POST("/execute", func(c *gin.Context) {
-			// 获取 API Key
+			// 获取API Key，这是调用OpenAI API所必需的
 			apiKey := c.GetHeader("X-API-Key")
 			if apiKey == "" {
 				logger.Error("缺少 API Key")
@@ -272,6 +272,7 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
+			// 解析请求体中的执行指令
 			var req ExecuteRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
 				logger.Debug("Execute 请求解析失败",
@@ -281,7 +282,7 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			// 打印请求数据（不包含敏感信息）
+			// 记录请求信息（不包含敏感数据）
 			logger.Debug("Execute 接口收到请求",
 				zap.String("instructions", req.Instructions),
 				zap.String("args", req.Args),
@@ -290,16 +291,16 @@ func setupRouter() *gin.Engine {
 				zap.String("currentModel", req.CurrentModel),
 				zap.Strings("selectedModels", req.SelectedModels),
 				zap.String("cluster", req.Cluster),
-				zap.String("apiKey", "***"), // 不记录实际的 API Key
+				zap.String("apiKey", "***"), // 安全考虑，不记录实际的API Key
 			)
 
-			// 使用请求中的 model，如果没有则使用默认值
+			// 确定使用的模型，如果请求中未指定则使用默认值
 			executeModel := req.CurrentModel
 			if executeModel == "" {
 				executeModel = "gpt-4"
 			}
 
-			// 构建执行指令
+			// 构建执行指令，合并instructions和args
 			instructions := req.Instructions
 			if req.Args != "" && !strings.Contains(instructions, req.Args) {
 				instructions = fmt.Sprintf("%s %s", req.Instructions, req.Args)
@@ -312,19 +313,19 @@ func setupRouter() *gin.Engine {
 				zap.String("cluster", req.Cluster),
 			)
 
-			// 构建 OpenAI 消息
+			// 构建发送给OpenAI的消息
 			messages := []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: executeSystemPrompt_cn, // 在系统提示中加入格式化要求
+					Content: executeSystemPrompt_cn, // 使用中文系统提示
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: instructions, // 直接使用处理后的instructions，不再添加前缀
+					Content: instructions,
 				},
 			}
 
-			// 执行指令
+			// 调用AI助手执行指令
 			response, _, err := assistants.AssistantWithConfig(executeModel, messages, maxTokens, countTokens, verbose, maxIterations, apiKey, req.BaseUrl)
 			if err != nil {
 				logger.Error("Execute 执行失败",
@@ -336,30 +337,32 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			// 解析 JSON 响应
+			// 解析AI助手的响应
 			var aiResp AIResponse
 			if err := json.Unmarshal([]byte(response), &aiResp); err != nil {
-				logger.Debug("响应不是 JSON 格式，作为最终答案处理",
+				logger.Debug("响应不是标准JSON格式，尝试提取final_answer",
 					zap.Error(err),
 					zap.String("response", response),
 				)
 
-				// 尝试从非标准JSON中提取final_answer
+				// 尝试从非标准JSON中提取final_answer字段
 				var genericResp map[string]interface{}
 				if err2 := json.Unmarshal([]byte(response), &genericResp); err2 == nil {
 					if finalAnswer, ok := genericResp["final_answer"].(string); ok && finalAnswer != "" {
-						logger.Debug("从非标准JSON中提取到final_answer",
+						logger.Debug("成功从非标准JSON中提取final_answer",
 							zap.String("final_answer", finalAnswer),
 						)
-						c.JSON(http.StatusOK, gin.H{
+						// 返回清理后的响应，只包含final_answer
+						cleanResp := map[string]interface{}{
 							"message": finalAnswer,
-							"status":  "success",
-						})
+							"status": "success",
+						}
+						c.JSON(http.StatusOK, cleanResp)
 						return
 					}
 				}
 
-				// 直接返回非 JSON 响应作为最终答案
+				// 如果无法提取final_answer，返回完整响应
 				c.JSON(http.StatusOK, gin.H{
 					"message": response,
 					"status":  "success",
@@ -367,13 +370,15 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			// 只有当有最终答案时才返回
+			// 处理标准JSON响应
 			if aiResp.FinalAnswer != "" {
+				// 返回最终答案
 				c.JSON(http.StatusOK, gin.H{
 					"message": aiResp.FinalAnswer,
 					"status":  "success",
 				})
 			} else {
+				// 如果没有最终答案，返回处理中的状态
 				c.JSON(http.StatusOK, gin.H{
 					"message": "指令正在执行中，请稍候...",
 					"status":  "processing",

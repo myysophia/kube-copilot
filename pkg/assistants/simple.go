@@ -249,18 +249,32 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 					zap.String("summary", resp),
 				)
 				
-				// 尝试从响应中提取final_answer
+				// 尝试从响应中提取final_answer并处理格式
+				// 这里处理LLM返回的JSON响应，确保只返回final_answer部分
 				var finalResponse map[string]interface{}
 				if err := json.Unmarshal([]byte(resp), &finalResponse); err == nil {
 					if finalAnswer, ok := finalResponse["final_answer"].(string); ok && finalAnswer != "" {
 						logger.Info("成功提取final_answer",
 							zap.String("final_answer", finalAnswer),
 						)
+						// 创建只包含final_answer的新响应对象
+						// 这样可以确保返回的JSON格式统一且简洁
+						cleanResp := map[string]interface{}{
+							"final_answer": finalAnswer,
+						}
+						// 将清理后的响应重新序列化为JSON字符串
+						cleanJSON, err := json.Marshal(cleanResp)
+						if err == nil {
+							return string(cleanJSON), chatHistory, nil
+						}
+						// 如果JSON序列化失败，直接返回原始的final_answer
 						return finalAnswer, chatHistory, nil
 					}
 				}
 				
-				return resp, chatHistory, nil
+				// 如果无法直接提取final_answer，尝试清理原始响应
+				cleanedResp := cleanJSON(resp)
+				return cleanedResp, chatHistory, nil
 			}
 		}
 	}
@@ -493,41 +507,68 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 					zap.String("summary", resp),
 				)
 				
-				// 尝试从响应中提取final_answer
+				// 尝试从响应中提取final_answer并处理格式
+				// 这里处理LLM返回的JSON响应，确保只返回final_answer部分
 				var finalResponse map[string]interface{}
 				if err := json.Unmarshal([]byte(resp), &finalResponse); err == nil {
 					if finalAnswer, ok := finalResponse["final_answer"].(string); ok && finalAnswer != "" {
 						logger.Info("成功提取final_answer",
 							zap.String("final_answer", finalAnswer),
 						)
+						// 创建只包含final_answer的新响应对象
+						// 这样可以确保返回的JSON格式统一且简洁
+						cleanResp := map[string]interface{}{
+							"final_answer": finalAnswer,
+						}
+						// 将清理后的响应重新序列化为JSON字符串
+						cleanJSON, err := json.Marshal(cleanResp)
+						if err == nil {
+							return string(cleanJSON), chatHistory, nil
+						}
+						// 如果JSON序列化失败，直接返回原始的final_answer
 						return finalAnswer, chatHistory, nil
 					}
 				}
 				
-				return resp, chatHistory, nil
+				// 如果无法直接提取final_answer，尝试清理原始响应
+				cleanedResp := cleanJSON(resp)
+				return cleanedResp, chatHistory, nil
 			}
 		}
 	}
 }
 
+// cleanJSON 清理和规范化JSON字符串
+// 主要功能：
+// 1. 解析输入的JSON字符串
+// 2. 如果存在final_answer字段，创建新的JSON只包含该字段
+// 3. 处理JSON中的特殊字符和格式问题
+// 参数：
+//   - input: 输入的JSON字符串
+// 返回：
+//   - 清理后的JSON字符串
 func cleanJSON(input string) string {
-	// 清理 Markdown 标记
-	input = strings.TrimSpace(input)
-	input = strings.TrimPrefix(input, "```json")
-	input = strings.TrimPrefix(input, "```")
-	input = strings.TrimSuffix(input, "```")
-	
-	// 尝试解析和重新格式化 JSON
-	var temp interface{}
-	if err := json.Unmarshal([]byte(input), &temp); err == nil {
-		if cleanBytes, err := json.Marshal(temp); err == nil {
-			return string(cleanBytes)
+	// 尝试将输入解析为map结构
+	var jsonMap map[string]interface{}
+	if err := json.Unmarshal([]byte(input), &jsonMap); err != nil {
+		// 如果解析失败，说明输入可能不是有效的JSON
+		// 返回原始输入，由调用方决定如何处理
+		return input
+	}
+
+	// 如果JSON中包含final_answer字段，提取并重新封装
+	if finalAnswer, ok := jsonMap["final_answer"].(string); ok {
+		// 创建新的map，只包含final_answer字段
+		cleanMap := map[string]interface{}{
+			"final_answer": finalAnswer,
+		}
+		// 将清理后的map重新序列化为JSON字符串
+		cleanJSON, err := json.Marshal(cleanMap)
+		if err == nil {
+			return string(cleanJSON)
 		}
 	}
-	
-	// 如果 JSON 解析失败，进行基本的清理
-	input = strings.ReplaceAll(input, "\n", " ")
-	input = strings.ReplaceAll(input, "\r", " ")
-	input = regexp.MustCompile(`\s+`).ReplaceAllString(input, " ")
-	return strings.TrimSpace(input)
+
+	// 如果提取或序列化过程失败，返回原始输入
+	return input
 }
