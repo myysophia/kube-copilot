@@ -248,7 +248,7 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 				logger.Info("完成总结",
 					zap.String("summary", resp),
 				)
-				
+
 				// 尝试从响应中提取final_answer并处理格式
 				// 这里处理LLM返回的JSON响应，确保只返回final_answer部分
 				var finalResponse map[string]interface{}
@@ -271,7 +271,7 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 						return finalAnswer, chatHistory, nil
 					}
 				}
-				
+
 				// 如果无法直接提取final_answer，尝试清理原始响应
 				cleanedResp := cleanJSON(resp)
 				return cleanedResp, chatHistory, nil
@@ -362,7 +362,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 	}
 
 	var toolPrompt tools.ToolPrompt
-	if err = json.Unmarshal([]byte(cleanedResp), &toolPrompt); err != nil {
+	if err = json.Unmarshal([]byte(resp), &toolPrompt); err != nil {
 		if verbose {
 			logger.Warn("无法解析工具提示，假定为最终答案",
 				zap.Error(err),
@@ -371,7 +371,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 			color.Cyan("Unable to parse tool from prompt, assuming got final answer.\n\n", resp)
 			color.Cyan("json marshal error: %s\n\n", err)
 		}
-		return cleanedResp, chatHistory, nil
+		return resp, chatHistory, nil
 	}
 
 	iterations := 0
@@ -506,7 +506,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				logger.Info("完成总结",
 					zap.String("summary", resp),
 				)
-				
+
 				// 尝试从响应中提取final_answer并处理格式
 				// 这里处理LLM返回的JSON响应，确保只返回final_answer部分
 				var finalResponse map[string]interface{}
@@ -529,7 +529,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 						return finalAnswer, chatHistory, nil
 					}
 				}
-				
+
 				// 如果无法直接提取final_answer，尝试清理原始响应
 				cleanedResp := cleanJSON(resp)
 				return cleanedResp, chatHistory, nil
@@ -545,6 +545,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 // 3. 处理JSON中的特殊字符和格式问题
 // 参数：
 //   - input: 输入的JSON字符串
+//
 // 返回：
 //   - 清理后的JSON字符串
 func cleanJSON(input string) string {

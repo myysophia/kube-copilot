@@ -163,3 +163,5 @@ dmypy.json
 
 example/
 .idea
+venv
+scripts
