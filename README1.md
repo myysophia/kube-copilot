@@ -426,5 +426,6 @@ cmd := exec.Command("kubectl", strings.Split(command, " ")...)
 
 ## prompt 优化
 ### 避免全量输出-o json 或者-o yaml
-
-kubectl get pods -n velero -o json
+大模型好像没有遵循我的prompt，总是会kubectl get nodes -o json，或kubectl get po -o json。 
+这个操作会产生大量的数据，超过上下文窗口。目前定义的max_token是2048
+kubectl get pods/node/deploy/statefulset  -o json

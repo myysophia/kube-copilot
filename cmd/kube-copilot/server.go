@@ -26,7 +26,7 @@ var (
 	logger *zap.Logger
 
 	// Execute flags (从 execute.go 同步)
-	maxTokens     = 204800
+	maxTokens     = 20480
 	countTokens   = true
 	verbose       = true
 	maxIterations = 10
@@ -355,7 +355,7 @@ func setupRouter() *gin.Engine {
 						// 返回清理后的响应，只包含final_answer
 						cleanResp := map[string]interface{}{
 							"message": finalAnswer,
-							"status": "success",
+							"status":  "success",
 						}
 						c.JSON(http.StatusOK, cleanResp)
 						return
