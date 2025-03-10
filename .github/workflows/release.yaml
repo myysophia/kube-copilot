@@ -25,7 +25,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_TOKEN }}
       - name: Build Docker image
         run: |
           docker build -t ${{ env.REGISTRY }}/${{ github.repository_owner }}/kube-copilot:${{ github.ref_name }} .

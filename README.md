@@ -196,3 +196,90 @@ If you would like to contribute to the project, please follow these guidelines:
 3. Make your changes and commit them with a descriptive commit message.
 4. Push your changes to your forked repository.
 5. Open a pull request to the main repository.
+
+## Deployment
+
+### Local Run
+
+1. Clone the repository:
+```bash
+git clone https://github.com/YOUR_USERNAME/kube-copilot.git
+cd kube-copilot
+```
+
+2. Build:
+```bash
+go build ./cmd/kube-copilot
+```
+
+3. Run:
+```bash
+./kube-copilot server --port 8080 --jwt-key your_jwt_key
+```
+
+### Docker Run
+
+```bash
+docker pull ghcr.io/YOUR_USERNAME/kube-copilot:latest
+docker run -p 8080:8080 ghcr.io/YOUR_USERNAME/kube-copilot:latest server --jwt-key your_jwt_key
+```
+
+### Kubernetes Deployment
+
+1. Create namespace:
+```bash
+kubectl create namespace kube-copilot
+```
+
+2. Create JWT key:
+```bash
+# Generate random key
+JWT_KEY=$(openssl rand -base64 32)
+# Create secret
+kubectl create secret generic kube-copilot-secret \
+  --from-literal=jwt-key=$JWT_KEY \
+  -n kube-copilot
+```
+
+3. Deploy service:
+```bash
+# Modify deploy/kubernetes/deployment.yaml with image address
+kubectl apply -f deploy/kubernetes/deployment.yaml
+```
+
+4. Verify deployment:
+```bash
+kubectl get pods -n kube-copilot
+```
+
+## Configuration
+
+### Environment Variables
+
+- `GIN_MODE`: Gin framework running mode, set to "release" for production
+- `JWT_KEY`: JWT signing key
+
+### Command Line Arguments
+
+- `--port`: Service listening port (default: 8080)
+- `--jwt-key`: JWT signing key (required)
+
+## CI/CD
+
+Project uses GitHub Actions for continuous integration and deployment:
+
+- Build image automatically when code is pushed to main branch
+- Build and push version image automatically when new tag (release) is created
+- Supports AMD64 and ARM64 architectures
+
+## Contribution Guidelines
+
+1. Fork this repository
+2. Create feature branch: `git checkout -b feature/my-feature`
+3. Commit changes: `git commit -am 'Add new feature'`
+4. Push branch: `git push origin feature/my-feature`
+5. Submit Pull Request
+
+## License
+
+Apache License 2.0

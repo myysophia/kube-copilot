@@ -12,26 +12,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build stage
-FROM golang:alpine AS builder
-ADD . /go/src/github.com/feiskyer/kube-copilot
-RUN cd /go/src/github.com/feiskyer/kube-copilot && \
-    apk update && apk add --no-cache gcc musl-dev openssl && \
-    CGO_ENABLED=0 go build -o _out/kube-copilot ./cmd/kube-copilot
+# 使用多阶段构建减小最终镜像大小
+FROM golang:1.21-alpine AS builder
 
-# Final image
-FROM alpine
-# EXPOSE 80
-WORKDIR /
+# 安装必要的构建工具
+RUN apk add --no-cache git make
 
-RUN apk add --update curl wget python3 py3-pip curl && \
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    chmod +x kubectl && mv kubectl /usr/local/bin && \
-    curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.1 && \
-    rm -rf /var/cache/apk/* && \
-    mkdir -p /etc/kube-copilot
+# 设置工作目录
+WORKDIR /app
 
-COPY --from=builder /go/src/github.com/feiskyer/kube-copilot/_out/kube-copilot /usr/local/bin/
+# 复制go.mod和go.sum
+COPY go.mod go.sum ./
 
-USER copilot
-ENTRYPOINT [ "/usr/local/bin/kube-copilot" ]
+# 下载依赖
+RUN go mod download
+
+# 复制源代码
+COPY . .
+
+# 构建应用
+RUN CGO_ENABLED=0 GOOS=linux go build -o kube-copilot ./cmd/kube-copilot
+
+# 使用轻量级基础镜像
+FROM alpine:3.19
+
+# 安装必要的运行时依赖
+RUN apk add --no-cache ca-certificates tzdata kubectl curl jq python3 py3-pip
+
+# 安装Python依赖
+RUN pip3 install kubernetes
+
+# 设置工作目录
+WORKDIR /app
+
+# 从builder阶段复制二进制文件
+COPY --from=builder /app/kube-copilot .
+
+# 设置环境变量
+ENV GIN_MODE=release
+
+# 暴露端口
+EXPOSE 8080
+
+# 启动命令
+ENTRYPOINT ["./kube-copilot"]
+CMD ["server", "--port", "8080"]

@@ -165,3 +165,6 @@ example/
 .idea
 venv
 scripts
+
+.cursorignore
+.cursor/
