@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
+	"github.com/feiskyer/kube-copilot/pkg/utils"
 	"github.com/sashabaranov/go-openai"
 	"go.uber.org/zap"
 	"os"
+	"time"
 
 	"github.com/feiskyer/swarm-go"
 )
@@ -70,6 +72,23 @@ const assistantPrompt_cn = `作为Kubernetes专家，根据给定的指示指导
 
 // AssistantFlow runs a simple workflow by following the given instructions.
 func AssistantFlow(model string, instructions string, verbose bool) (string, error) {
+	// 获取性能统计工具
+	perfStats := utils.GetPerfStats()
+	// 开始整体工作流计时
+	defer perfStats.TraceFunc("workflow_assistant_total")()
+	
+	// 记录开始时间
+	startTime := time.Now()
+	
+	logger.Debug("开始执行AssistantFlow",
+		zap.String("model", model),
+		zap.String("instructions", instructions),
+		zap.Bool("verbose", verbose),
+	)
+	
+	// 开始工作流初始化计时
+	perfStats.StartTimer("workflow_init")
+	
 	assistantFlow := &swarm.Workflow{
 		Name:     "assistant-workflow",
 		Model:    model,
@@ -89,17 +108,56 @@ func AssistantFlow(model string, instructions string, verbose bool) (string, err
 
 	// Create OpenAI client
 	client, err := NewSwarm()
+	
+	// 停止工作流初始化计时
+	initDuration := perfStats.StopTimer("workflow_init")
+	logger.Debug("工作流初始化完成",
+		zap.Duration("duration", initDuration),
+	)
+	
 	if err != nil {
+		logger.Error("创建Swarm客户端失败",
+			zap.Error(err),
+		)
+		// 记录失败的客户端创建性能
+		perfStats.RecordMetric("workflow_client_failed", initDuration)
 		fmt.Printf("Failed to create client: %v\n", err)
 		os.Exit(1)
 	}
 
+	// 开始工作流执行计时
+	perfStats.StartTimer("workflow_run")
+	
 	// Initialize and run workflow
 	assistantFlow.Initialize()
 	result, _, err := assistantFlow.Run(context.Background(), client)
+	
+	// 停止工作流执行计时
+	runDuration := perfStats.StopTimer("workflow_run")
+	
+	// 记录总执行时间
+	totalDuration := time.Since(startTime)
+	
 	if err != nil {
+		logger.Error("工作流执行失败",
+			zap.Error(err),
+			zap.Duration("run_duration", runDuration),
+			zap.Duration("total_duration", totalDuration),
+		)
+		// 记录失败的工作流执行性能
+		perfStats.RecordMetric("workflow_run_failed", runDuration)
 		return "", err
 	}
+	
+	logger.Info("工作流执行成功",
+		zap.Duration("run_duration", runDuration),
+		zap.Duration("total_duration", totalDuration),
+	)
+	
+	// 记录成功的工作流执行性能
+	perfStats.RecordMetric("workflow_run_success", runDuration)
+	// 记录模型类型的性能指标
+	perfStats.RecordMetric("workflow_model_"+model, runDuration)
 
 	return result, nil
 }

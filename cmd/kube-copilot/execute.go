@@ -16,6 +16,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	//"github.com/fatih/color"
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
@@ -133,8 +134,12 @@ const executeSystemPrompt_cn = `您是Kubernetes和云原生网络的技术专�
     "input": "<工具输入，确保语法正确>"
   },
   "observation": "<工具执行结果，由外部填充>",
-  "final_answer": "<最终答案，使用 Markdown 格式，换行符用 \\n 表示>"
-}`
+  "final_answer": "<最终答案，使用 Markdown 格式，换行符用 \n 表示>"
+}
+
+目标：
+在 Kubernetes 和云原生网络领域内识别问题根本原因，提供清晰、可行的解决方案，同时保持诊断和故障排除的运营约束。
+`
 
 var instructions string
 var model string
@@ -164,6 +169,14 @@ var executeCmd = &cobra.Command{
 	Use:   "execute",
 	Short: "Execute operations based on prompt instructions",
 	Run: func(cmd *cobra.Command, args []string) {
+		// 获取性能统计工具
+		perfStats := utils.GetPerfStats()
+		// 开始整体执行计时
+		defer perfStats.TraceFunc("execute_cmd_total")()
+
+		// 记录开始时间
+		startTime := time.Now()
+
 		// 确保日志已初始化
 		if logger == nil {
 			initLogger()
@@ -185,6 +198,9 @@ var executeCmd = &cobra.Command{
 			zap.String("model", model),
 		)
 
+		// 开始构建消息计时
+		perfStats.StartTimer("execute_build_messages")
+
 		messages := []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
@@ -196,6 +212,12 @@ var executeCmd = &cobra.Command{
 			},
 		}
 
+		// 停止构建消息计时
+		buildMsgDuration := perfStats.StopTimer("execute_build_messages")
+		logger.Debug("构建消息完成",
+			zap.Duration("duration", buildMsgDuration),
+		)
+
 		logger.Debug("发送请求到 OpenAI",
 			zap.Any("messages", messages),
 			zap.Int("maxTokens", maxTokens),
@@ -204,11 +226,26 @@ var executeCmd = &cobra.Command{
 			zap.Int("maxIterations", maxIterations),
 		)
 
+		// 开始AI助手执行计时
+		perfStats.StartTimer("execute_assistant")
+
 		response, _, err := assistants.Assistant(model, messages, maxTokens, countTokens, verbose, maxIterations)
+
+		// 停止AI助手执行计时
+		assistantDuration := perfStats.StopTimer("execute_assistant")
+		logger.Info("AI助手执行完成",
+			zap.Duration("duration", assistantDuration),
+		)
+
+		// 记录模型类型的性能指标
+		perfStats.RecordMetric("execute_model_"+model, assistantDuration)
+
 		if err != nil {
 			logger.Error("执行失败",
 				zap.Error(err),
 			)
+			// 记录失败的执行性能
+			perfStats.RecordMetric("execute_assistant_failed", assistantDuration)
 			return
 		}
 
@@ -216,19 +253,44 @@ var executeCmd = &cobra.Command{
 			zap.String("response", response),
 		)
 
+		// 开始格式化结果计时
+		perfStats.StartTimer("execute_format_results")
+
 		formatInstructions := fmt.Sprintf("Extract the execuation results for user instructions and reformat in a concise Markdown response: %s", response)
 		result, err := workflows.AssistantFlow(model, formatInstructions, verbose)
+
+		// 停止格式化结果计时
+		formatDuration := perfStats.StopTimer("execute_format_results")
+		logger.Debug("格式化结果完成",
+			zap.Duration("duration", formatDuration),
+		)
+
 		if err != nil {
 			logger.Error("格式化结果失败",
 				zap.Error(err),
 				zap.String("raw_response", response),
 			)
+			// 记录失败的格式化性能
+			perfStats.RecordMetric("execute_format_failed", formatDuration)
 			return
 		}
 
+		// 记录总执行时间
+		totalDuration := time.Since(startTime)
+		perfStats.RecordMetric("execute_total_time", totalDuration)
+
 		logger.Info("执行完成",
 			zap.String("result", result),
+			zap.Duration("total_duration", totalDuration),
 		)
 		utils.RenderMarkdown(result)
+
+		// 打印性能统计信息（仅在verbose模式下）
+		if verbose {
+			stats := perfStats.PrintStats()
+			logger.Debug("性能统计信息",
+				zap.String("stats", stats),
+			)
+		}
 	},
 }

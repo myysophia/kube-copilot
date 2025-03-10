@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
+	"github.com/feiskyer/kube-copilot/pkg/utils"
 )
 
 var (
@@ -91,6 +92,13 @@ func initLogger() {
 	if err != nil {
 		panic(fmt.Sprintf("初始化日志失败: %v", err))
 	}
+
+	// 初始化性能统计工具
+	perfStats := utils.GetPerfStats()
+	perfStats.SetLogger(logger)
+	perfStats.SetEnableLogging(true)
+
+	logger.Info("性能统计工具已初始化")
 }
 
 // JWT middleware
@@ -158,17 +166,25 @@ func setupRouter() *gin.Engine {
 			zap.String("body", string(bodyBytes)),
 		)
 
+		// 开始请求性能统计
+		perfStats := utils.GetPerfStats()
+		perfStats.StartTimer("http_request_" + c.Request.Method + "_" + c.Request.URL.Path)
+
 		// 处理请求
 		c.Next()
 
 		// 请求结束时间
 		duration := time.Since(startTime)
 
+		// 停止请求性能统计
+		elapsed := perfStats.StopTimer("http_request_" + c.Request.Method + "_" + c.Request.URL.Path)
+
 		logger.Debug("请求处理完成",
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("duration", duration),
+			zap.Duration("perf_duration", elapsed),
 		)
 	})
 
@@ -230,7 +246,7 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			model := c.DefaultQuery("model", "gpt-4")
+			model := c.DefaultQuery("model", "gpt-4o")
 			cluster := c.DefaultQuery("cluster", "default")
 
 			// TODO: Implement actual diagnosis using workflows.DiagnoseFlow
@@ -250,7 +266,7 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
-			model := c.DefaultQuery("model", "gpt-4")
+			model := c.DefaultQuery("model", "gpt-4o")
 			cluster := c.DefaultQuery("cluster", "default")
 
 			// TODO: Implement actual analysis
@@ -264,6 +280,11 @@ func setupRouter() *gin.Engine {
 		})
 
 		protected.POST("/execute", func(c *gin.Context) {
+			// 获取性能统计工具
+			perfStats := utils.GetPerfStats()
+			// 开始整体执行计时
+			defer perfStats.TraceFunc("execute_total")()
+
 			// 获取API Key，这是调用OpenAI API所必需的
 			apiKey := c.GetHeader("X-API-Key")
 			if apiKey == "" {
@@ -325,8 +346,18 @@ func setupRouter() *gin.Engine {
 				},
 			}
 
+			// 开始AI助手执行计时
+			perfStats.StartTimer("execute_assistant")
+
 			// 调用AI助手执行指令
 			response, _, err := assistants.AssistantWithConfig(executeModel, messages, maxTokens, countTokens, verbose, maxIterations, apiKey, req.BaseUrl)
+
+			// 停止AI助手执行计时
+			assistantDuration := perfStats.StopTimer("execute_assistant")
+			logger.Info("AI助手执行完成",
+				zap.Duration("duration", assistantDuration),
+			)
+
 			if err != nil {
 				logger.Error("Execute 执行失败",
 					zap.Error(err),
@@ -337,21 +368,78 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
+			// 开始响应解析计时
+			perfStats.StartTimer("execute_response_parse")
+			
 			// 解析AI助手的响应
 			var aiResp AIResponse
-			if err := json.Unmarshal([]byte(response), &aiResp); err != nil {
-				logger.Debug("响应不是标准JSON格式，尝试提取final_answer",
+			
+			// 首先尝试标准JSON解析
+			err = json.Unmarshal([]byte(response), &aiResp)
+			
+			// 如果标准解析失败，尝试更健壮的解析方法
+			if err != nil {
+				logger.Debug("标准JSON解析失败，尝试更健壮的解析方法",
 					zap.Error(err),
 					zap.String("response", response),
 				)
-
-				// 尝试从非标准JSON中提取final_answer字段
+				
+				// 尝试使用工具函数提取final_answer
+				finalAnswer, extractErr := utils.ExtractField(response, "final_answer")
+				if extractErr == nil && finalAnswer != "" {
+					logger.Debug("成功使用工具函数提取final_answer",
+						zap.String("final_answer", finalAnswer),
+					)
+					
+					// 停止响应解析计时
+					parseDuration := perfStats.StopTimer("execute_response_parse")
+					logger.Debug("响应解析完成（工具函数提取）",
+						zap.Duration("duration", parseDuration),
+					)
+					
+					// 返回提取的final_answer
+					c.JSON(http.StatusOK, gin.H{
+						"message": finalAnswer,
+						"status":  "success",
+					})
+					return
+				}
+				
+				// 如果提取失败，尝试清理JSON后再解析
+				cleanedJSON := utils.CleanJSON(response)
+				if err2 := json.Unmarshal([]byte(cleanedJSON), &aiResp); err2 == nil && aiResp.FinalAnswer != "" {
+					logger.Debug("成功从清理后的JSON中提取final_answer",
+						zap.String("final_answer", aiResp.FinalAnswer),
+					)
+					
+					// 停止响应解析计时
+					parseDuration := perfStats.StopTimer("execute_response_parse")
+					logger.Debug("响应解析完成（清理JSON后解析）",
+						zap.Duration("duration", parseDuration),
+					)
+					
+					// 返回提取的final_answer
+					c.JSON(http.StatusOK, gin.H{
+						"message": aiResp.FinalAnswer,
+						"status":  "success",
+					})
+					return
+				}
+				
+				// 如果所有方法都失败，尝试从非标准JSON中提取
 				var genericResp map[string]interface{}
 				if err2 := json.Unmarshal([]byte(response), &genericResp); err2 == nil {
 					if finalAnswer, ok := genericResp["final_answer"].(string); ok && finalAnswer != "" {
 						logger.Debug("成功从非标准JSON中提取final_answer",
 							zap.String("final_answer", finalAnswer),
 						)
+						
+						// 停止响应解析计时
+						parseDuration := perfStats.StopTimer("execute_response_parse")
+						logger.Debug("响应解析完成（非标准JSON提取）",
+							zap.Duration("duration", parseDuration),
+						)
+						
 						// 返回清理后的响应，只包含final_answer
 						cleanResp := map[string]interface{}{
 							"message": finalAnswer,
@@ -362,6 +450,12 @@ func setupRouter() *gin.Engine {
 					}
 				}
 
+				// 停止响应解析计时
+				parseDuration := perfStats.StopTimer("execute_response_parse")
+				logger.Debug("所有解析方法均失败，返回原始响应",
+					zap.Duration("duration", parseDuration),
+				)
+				
 				// 如果无法提取final_answer，返回完整响应
 				c.JSON(http.StatusOK, gin.H{
 					"message": response,
@@ -370,6 +464,12 @@ func setupRouter() *gin.Engine {
 				return
 			}
 
+			// 停止响应解析计时
+			parseDuration := perfStats.StopTimer("execute_response_parse")
+			logger.Debug("响应解析完成（标准格式）",
+				zap.Duration("duration", parseDuration),
+			)
+			
 			// 处理标准JSON响应
 			if aiResp.FinalAnswer != "" {
 				// 返回最终答案
@@ -384,6 +484,25 @@ func setupRouter() *gin.Engine {
 					"status":  "processing",
 				})
 			}
+		})
+
+		// 添加性能统计API
+		protected.GET("/perf/stats", func(c *gin.Context) {
+			perfStats := utils.GetPerfStats()
+			stats := perfStats.PrintStats()
+			c.JSON(http.StatusOK, gin.H{
+				"stats": stats,
+			})
+		})
+
+		// 重置性能统计API
+		protected.POST("/perf/reset", func(c *gin.Context) {
+			perfStats := utils.GetPerfStats()
+			perfStats.ResetMetrics()
+			c.JSON(http.StatusOK, gin.H{
+				"message": "性能统计已重置",
+				"status":  "success",
+			})
 		})
 	}
 
