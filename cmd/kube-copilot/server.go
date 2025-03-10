@@ -327,9 +327,13 @@ func setupRouter() *gin.Engine {
 				instructions = fmt.Sprintf("%s %s", req.Instructions, req.Args)
 			}
 
+			// 清理指令中可能包含的路径前缀
+			cleanInstructions := strings.TrimPrefix(instructions, "/execute")
+			cleanInstructions = strings.TrimSpace(cleanInstructions)
+
 			logger.Debug("Execute 执行参数",
 				zap.String("model", executeModel),
-				zap.String("instructions", instructions),
+				zap.String("instructions", cleanInstructions),
 				zap.String("baseUrl", req.BaseUrl),
 				zap.String("cluster", req.Cluster),
 			)
@@ -342,7 +346,7 @@ func setupRouter() *gin.Engine {
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: instructions,
+					Content: cleanInstructions,
 				},
 			}
 
