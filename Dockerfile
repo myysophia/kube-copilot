@@ -37,10 +37,20 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o kube-copilot ./cmd/kube-copilot
 FROM alpine:3.19
 
 # 安装必要的运行时依赖
-RUN apk add --no-cache ca-certificates tzdata kubectl curl jq python3 py3-pip
-
-# 安装Python依赖
-RUN pip3 install kubernetes
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    kubectl \
+    curl \
+    jq \
+    python3 \
+    py3-pip \
+    gcc \
+    python3-dev \
+    musl-dev \
+    linux-headers \
+    && pip3 install --no-cache-dir kubernetes \
+    && apk del gcc python3-dev musl-dev linux-headers
 
 # 设置工作目录
 WORKDIR /app
