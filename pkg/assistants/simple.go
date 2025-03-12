@@ -175,6 +175,16 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 						zap.String("tool", toolPrompt.Action.Name),
 						zap.String("observation", observation),
 					)
+					// 检查执行结果是否为空
+					if observation == "" {
+						toolPrompt.FinalAnswer = "未找到相关信息"
+						assistantMessage, _ := json.Marshal(toolPrompt)
+						chatHistory = append(chatHistory, openai.ChatCompletionMessage{
+							Role:    openai.ChatMessageRoleAssistant,
+							Content: string(assistantMessage),
+						})
+						return toolPrompt.FinalAnswer, chatHistory, nil
+					}
 				}
 			} else {
 				logger.Warn("工具不可用",
@@ -474,6 +484,16 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 						zap.String("observation", observation),
 						zap.Duration("duration", toolDuration),
 					)
+					// 检查执行结果是否为空
+					if observation == "" {
+						toolPrompt.FinalAnswer = "未找到相关信息"
+						assistantMessage, _ := json.Marshal(toolPrompt)
+						chatHistory = append(chatHistory, openai.ChatCompletionMessage{
+							Role:    openai.ChatMessageRoleAssistant,
+							Content: string(assistantMessage),
+						})
+						return toolPrompt.FinalAnswer, chatHistory, nil
+					}
 				}
 			} else {
 				// 停止工具执行计时（工具不可用的情况）
