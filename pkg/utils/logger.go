@@ -54,8 +54,10 @@ func DefaultLogConfig() *LogConfig {
 	return &LogConfig{
 		Level:         zapcore.DebugLevel,
 		LogDir:        defaultLogDir,
-		Filename:      "kube-copilot-%Y%m%d.log", // 使用日期格式化符号，按天拆分
-		MaxSize:       10,                         // 10MB
+		// Go 的时间格式化语法使用特定的参考时间：2006-01-02 15:04:05
+		// 其中 20060102 表示 YYYYMMDD 格式的日期
+		Filename:      "kube-copilot-20060102.log", // 使用 Go 的时间格式化语法，按天拆分
+		MaxSize:       10,                          // 10MB
 		MaxBackups:    10,
 		MaxAge:        7, // 7天
 		Compress:      true,
@@ -72,13 +74,13 @@ func checkRotateLogger(config *LogConfig) {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-	// 如果日期变了，需要轮转日志文件
-	if today.After(lastRotateDate) {
+	// 如果是首次调用或日期变了，需要轮转日志文件
+	if lastRotateDate.IsZero() || today.After(lastRotateDate) {
 		// 格式化新的文件名
 		newFilename := now.Format(config.Filename)
 		
-		// 如果文件名变了，需要重新初始化日志
-		if newFilename != currentLogFile {
+		// 如果是首次调用或文件名变了，需要重新初始化日志
+		if currentLogFile == "" || newFilename != currentLogFile {
 			// 关闭旧的日志
 			if globalLogger != nil {
 				globalLogger.Sync()
@@ -108,6 +110,10 @@ func InitLogger(config *LogConfig) (*zap.Logger, error) {
 		// 获取当前日期，格式化文件名
 		now := time.Now()
 		filename := now.Format(config.Filename)
+		
+		// 更新当前日志文件名和轮转时间
+		currentLogFile = filename
+		lastRotateDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 		// 创建 lumberjack 日志切割器
 		lumberjackLogger := &lumberjack.Logger{
