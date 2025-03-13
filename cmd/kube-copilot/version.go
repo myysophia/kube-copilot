@@ -16,7 +16,9 @@ package main
 import (
 	"fmt"
 
+	"github.com/feiskyer/kube-copilot/pkg/utils"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 const (
@@ -28,6 +30,12 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of kube-copilot",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("kube-copiolt %s\n", VERSION)
+		// 获取日志记录器
+		logger := utils.GetLogger()
+		
+		logger.Info("版本信息",
+			zap.String("version", VERSION),
+		)
+		utils.Info(fmt.Sprintf("kube-copilot %s", VERSION))
 	},
 }

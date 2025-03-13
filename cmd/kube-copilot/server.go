@@ -83,12 +83,13 @@ type AIResponse struct {
 
 // initLogger 初始化 Zap 日志配置
 func initLogger() {
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	config.Level.SetLevel(zapcore.DebugLevel)
-
+	// 使用新的日志工具包初始化日志
+	logConfig := utils.DefaultLogConfig()
+	// 设置日志级别为 Debug
+	logConfig.Level = zapcore.DebugLevel
+	
 	var err error
-	logger, err = config.Build()
+	logger, err = utils.InitLogger(logConfig)
 	if err != nil {
 		panic(fmt.Sprintf("初始化日志失败: %v", err))
 	}
@@ -98,7 +99,13 @@ func initLogger() {
 	perfStats.SetLogger(logger)
 	perfStats.SetEnableLogging(true)
 
-	logger.Info("性能统计工具已初始化")
+	logger.Info("日志系统初始化完成",
+		zap.String("log_dir", logConfig.LogDir),
+		zap.String("log_file", logConfig.Filename),
+		zap.Int("max_size_mb", logConfig.MaxSize),
+		zap.Int("max_backups", logConfig.MaxBackups),
+		zap.Int("max_age_days", logConfig.MaxAge),
+	)
 }
 
 // JWT middleware

@@ -7,7 +7,6 @@ import (
 	"github.com/feiskyer/kube-copilot/pkg/utils"
 	"github.com/sashabaranov/go-openai"
 	"go.uber.org/zap"
-	"os"
 	"time"
 
 	"github.com/feiskyer/swarm-go"
@@ -16,12 +15,8 @@ import (
 var logger *zap.Logger
 
 func init() {
-	var err error
-	config := zap.NewDevelopmentConfig()
-	logger, err = config.Build()
-	if err != nil {
-		panic(fmt.Sprintf("无法初始化日志: %v", err))
-	}
+	// 使用新的日志工具包获取日志记录器
+	logger = utils.GetLogger()
 }
 
 const assistantPrompt = `As a Kubernetes expert, guide the user according to the given instructions to solve their problem or achieve their objective.
@@ -76,19 +71,19 @@ func AssistantFlow(model string, instructions string, verbose bool) (string, err
 	perfStats := utils.GetPerfStats()
 	// 开始整体工作流计时
 	defer perfStats.TraceFunc("workflow_assistant_total")()
-	
+
 	// 记录开始时间
 	startTime := time.Now()
-	
+
 	logger.Debug("开始执行AssistantFlow",
 		zap.String("model", model),
 		zap.String("instructions", instructions),
 		zap.Bool("verbose", verbose),
 	)
-	
+
 	// 开始工作流初始化计时
 	perfStats.StartTimer("workflow_init")
-	
+
 	assistantFlow := &swarm.Workflow{
 		Name:     "assistant-workflow",
 		Model:    model,
@@ -108,36 +103,37 @@ func AssistantFlow(model string, instructions string, verbose bool) (string, err
 
 	// Create OpenAI client
 	client, err := NewSwarm()
-	
+
 	// 停止工作流初始化计时
 	initDuration := perfStats.StopTimer("workflow_init")
 	logger.Debug("工作流初始化完成",
 		zap.Duration("duration", initDuration),
 	)
-	
+
 	if err != nil {
 		logger.Error("创建Swarm客户端失败",
 			zap.Error(err),
 		)
 		// 记录失败的客户端创建性能
 		perfStats.RecordMetric("workflow_client_failed", initDuration)
-		fmt.Printf("Failed to create client: %v\n", err)
-		os.Exit(1)
+		logger.Fatal("客户端创建失败",
+			zap.Error(err),
+		)
 	}
 
 	// 开始工作流执行计时
 	perfStats.StartTimer("workflow_run")
-	
+
 	// Initialize and run workflow
 	assistantFlow.Initialize()
 	result, _, err := assistantFlow.Run(context.Background(), client)
-	
+
 	// 停止工作流执行计时
 	runDuration := perfStats.StopTimer("workflow_run")
-	
+
 	// 记录总执行时间
 	totalDuration := time.Since(startTime)
-	
+
 	if err != nil {
 		logger.Error("工作流执行失败",
 			zap.Error(err),
@@ -148,12 +144,12 @@ func AssistantFlow(model string, instructions string, verbose bool) (string, err
 		perfStats.RecordMetric("workflow_run_failed", runDuration)
 		return "", err
 	}
-	
+
 	logger.Info("工作流执行成功",
 		zap.Duration("run_duration", runDuration),
 		zap.Duration("total_duration", totalDuration),
 	)
-	
+
 	// 记录成功的工作流执行性能
 	perfStats.RecordMetric("workflow_run_success", runDuration)
 	// 记录模型类型的性能指标
@@ -164,15 +160,8 @@ func AssistantFlow(model string, instructions string, verbose bool) (string, err
 
 // AssistantFlowWithConfig 是支持自定义配置的简单工作流
 func AssistantFlowWithConfig(model string, input string, verbose bool, apiKey string, baseUrl string) (string, error) {
-	if logger == nil {
-		// 如果 logger 还没有初始化，进行初始化
-		config := zap.NewDevelopmentConfig()
-		var err error
-		logger, err = config.Build()
-		if err != nil {
-			return "", fmt.Errorf("初始化日志失败: %v", err)
-		}
-	}
+	// 使用全局日志记录器
+	logger := utils.GetLogger()
 
 	logger.Info("开始执行 AssistantFlowWithConfig",
 		zap.String("model", model),

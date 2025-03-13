@@ -72,6 +72,9 @@ func NumTokensFromMessages(messages []openai.ChatCompletionMessage, model string
 		"gpt-4-0314",
 		"gpt-4-32k-0314",
 		"gpt-4-0613",
+		"qwen-max",
+		"qwen-plus",
+		"gpt-4o",
 		"gpt-4-32k-0613":
 		tokensPerMessage = 3
 		tokensPerName = 1

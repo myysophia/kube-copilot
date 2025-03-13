@@ -21,6 +21,7 @@ import (
 	"github.com/feiskyer/kube-copilot/pkg/utils"
 	"github.com/feiskyer/kube-copilot/pkg/workflows"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // 分析命令的配置参数
@@ -42,24 +43,39 @@ var analyzeCmd = &cobra.Command{
 	Use:   "analyze",
 	Short: "Analyze issues for a given resource",
 	Run: func(cmd *cobra.Command, args []string) {
+		// 获取日志记录器
+		logger := utils.GetLogger()
+		
 		if analysisName == "" && len(args) > 0 {
 			analysisName = args[0]
 		}
 		if analysisName == "" {
-			fmt.Println("Please provide a resource name")
+			logger.Error("未提供资源名称")
+			utils.Error("请提供一个资源名称")
 			return
 		}
 
-		fmt.Printf("Analysing %s %s/%s\n", analysisResource, analysisNamespace, analysisName)
+		logger.Info("开始分析资源",
+			zap.String("resource", analysisResource),
+			zap.String("namespace", analysisNamespace),
+			zap.String("name", analysisName),
+		)
+		utils.Info(fmt.Sprintf("正在分析 %s %s/%s", analysisResource, analysisNamespace, analysisName))
 
 		manifests, err := kubernetes.GetYaml(analysisResource, analysisName, analysisNamespace)
 		if err != nil {
+			logger.Error("获取资源清单失败",
+				zap.Error(err),
+			)
 			color.Red(err.Error())
 			return
 		}
 
 		response, err := workflows.AnalysisFlow(model, manifests, verbose)
 		if err != nil {
+			logger.Error("分析资源失败",
+				zap.Error(err),
+			)
 			color.Red(err.Error())
 			return
 		}

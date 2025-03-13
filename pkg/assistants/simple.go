@@ -16,7 +16,6 @@ package assistants
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fatih/color"
 	"github.com/feiskyer/kube-copilot/pkg/llms"
 	"github.com/feiskyer/kube-copilot/pkg/tools"
 	"github.com/feiskyer/kube-copilot/pkg/utils"
@@ -28,11 +27,8 @@ import (
 var logger *zap.Logger
 
 func init() {
-	var err error
-	logger, err = zap.NewProduction()
-	if err != nil {
-		panic(fmt.Sprintf("无法初始化日志: %v", err))
-	}
+	// 使用新的日志工具包获取日志记录器
+	logger = utils.GetLogger()
 }
 
 const (
@@ -69,13 +65,11 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 			logger.Info("Token 统计",
 				zap.Int("total_tokens", count),
 			)
-			color.Green("Total tokens: %d\n\n", count)
 		}
 	}()
 
 	if verbose {
 		logger.Debug("开始第一轮对话")
-		color.Blue("Iteration 1): chatting with LLM\n")
 	}
 
 	resp, err := client.Chat(model, maxTokens, chatHistory)
@@ -99,7 +93,6 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 		logger.Debug("LLM 初始响应",
 			zap.String("response", resp),
 		)
-		color.Cyan("Initial response from LLM:\n%s\n\n", resp)
 	}
 
 	var toolPrompt tools.ToolPrompt
@@ -109,8 +102,6 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 				zap.Error(err),
 				zap.String("response", resp),
 			)
-			color.Cyan("Unable to parse tool from prompt, assuming got final answer.\n\n", resp)
-			color.Cyan("json marshal error: %s\n\n", err)
 		}
 		return resp, chatHistory, nil
 	}
@@ -127,14 +118,15 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 		)
 
 		if verbose {
-			color.Cyan("Thought: %s\n\n", toolPrompt.Thought)
+			logger.Debug("思考过程",
+				zap.String("thought", toolPrompt.Thought),
+			)
 		}
 
 		if iterations > maxIterations {
 			logger.Warn("达到最大迭代次数",
 				zap.Int("maxIterations", maxIterations),
 			)
-			color.Red("Max iterations reached")
 			return toolPrompt.FinalAnswer, chatHistory, nil
 		}
 
@@ -144,7 +136,9 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 				zap.String("finalAnswer", toolPrompt.FinalAnswer),
 			)
 			if verbose {
-				color.Cyan("Final answer: %v\n\n", toolPrompt.FinalAnswer)
+				logger.Debug("最终答案",
+					zap.String("finalAnswer", toolPrompt.FinalAnswer),
+				)
 			}
 			return toolPrompt.FinalAnswer, chatHistory, nil
 		}
@@ -157,8 +151,14 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 			)
 
 			if verbose {
-				color.Blue("Iteration %d): executing tool %s\n", iterations, toolPrompt.Action.Name)
-				color.Cyan("Invoking %s tool with inputs: \n============\n%s\n============\n\n", toolPrompt.Action.Name, toolPrompt.Action.Input)
+				logger.Debug("执行工具迭代",
+					zap.Int("iteration", iterations),
+					zap.String("tool", toolPrompt.Action.Name),
+				)
+				logger.Debug("工具输入",
+					zap.String("tool", toolPrompt.Action.Name),
+					zap.String("input", toolPrompt.Action.Input),
+				)
 			}
 
 			if toolFunc, ok := tools.CopilotTools[toolPrompt.Action.Name]; ok {
@@ -177,7 +177,7 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 					)
 					// 检查执行结果是否为空
 					if observation == "" {
-						toolPrompt.FinalAnswer = "我的模型是:" + model + "你的问题我好像没理解,你可以再问我一下或者试试其他模型吧!"
+						toolPrompt.FinalAnswer = "我的模型是:" + model + "你的问题我好像没理解,你可以重新问我一次，我保证认真回答或者试试其他模型吧!"
 						assistantMessage, _ := json.Marshal(toolPrompt)
 						chatHistory = append(chatHistory, openai.ChatCompletionMessage{
 							Role:    openai.ChatMessageRoleAssistant,
@@ -194,7 +194,9 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 			}
 
 			if verbose {
-				color.Cyan("Observation: %s\n\n", observation)
+				logger.Debug("工具执行结果",
+					zap.String("observation", observation),
+				)
 			}
 
 			// Constrict the prompt to the max tokens allowed by the model.
@@ -212,7 +214,9 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 
 			// Start next iteration of LLM chat.
 			if verbose {
-				color.Blue("Iteration %d): chatting with LLM\n", iterations)
+				logger.Debug("开始新一轮对话",
+					zap.Int("iteration", iterations),
+				)
 			}
 
 			resp, err := client.Chat(model, maxTokens, chatHistory)
@@ -231,7 +235,6 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 				logger.Debug("LLM 中间响应",
 					zap.String("response", resp),
 				)
-				color.Cyan("Intermediate response from LLM: %s\n\n", resp)
 			}
 
 			// extract the tool prompt from the LLM response.
@@ -240,7 +243,6 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 					logger.Warn("无法从 LLM 解析工具，总结最终答案",
 						zap.Error(err),
 					)
-					color.Cyan("Unable to parse tools from LLM (%s), summarizing the final answer.\n\n", err.Error())
 				}
 
 				chatHistory = append(chatHistory, openai.ChatCompletionMessage{
@@ -268,13 +270,6 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 						logger.Info("成功提取final_answer",
 							zap.String("final_answer", finalAnswer),
 						)
-						// 创建只包含final_answer的新响应对象
-						// 这样可以确保返回的JSON格式统一且简洁
-						//cleanResp := map[string]interface{}{
-						//	"final_answer": finalAnswer,
-						//}
-						// 将清理后的响应重新序列化为JSON字符串
-						//cleanJSON, err := json.Marshal(cleanResp)
 						if err == nil {
 							return string(resp), chatHistory, nil
 						}
@@ -330,20 +325,18 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 		)
 		return "", nil, fmt.Errorf("unable to get OpenAI client: %v", err)
 	}
-
-	defer func() {
-		if countTokens {
-			count := llms.NumTokensFromMessages(chatHistory, model)
-			logger.Info("Token 统计",
-				zap.Int("total_tokens", count),
-			)
-			color.Green("Total tokens: %d\n\n", count)
-		}
-	}()
+	//
+	//defer func() {
+	//	if countTokens {
+	//		count := llms.NumTokensFromMessages(chatHistory, model)
+	//		logger.Info("Token 统计",
+	//			zap.Int("total_tokens", count),
+	//		)
+	//	}
+	//}()
 
 	if verbose {
 		logger.Debug("开始第一轮对话")
-		color.Blue("Iteration 1): chatting with LLM\n")
 	}
 
 	// 开始第一轮对话计时
@@ -383,7 +376,6 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 		logger.Debug("LLM 初始响应",
 			zap.String("response", resp),
 		)
-		color.Cyan("Initial response from LLM:\n%s\n\n", resp)
 	}
 
 	// 开始解析工具提示计时
@@ -403,8 +395,6 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				zap.Error(err),
 				zap.String("response", resp),
 			)
-			color.Cyan("Unable to parse tool from prompt, assuming got final answer.\n\n", resp)
-			color.Cyan("json marshal error: %s\n\n", err)
 		}
 		return resp, chatHistory, nil
 	}
@@ -427,14 +417,15 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 		)
 
 		if verbose {
-			color.Cyan("Thought: %s\n\n", toolPrompt.Thought)
+			logger.Debug("思考过程",
+				zap.String("thought", toolPrompt.Thought),
+			)
 		}
 
 		if iterations > maxIterations {
 			logger.Warn("达到最大迭代次数",
 				zap.Int("maxIterations", maxIterations),
 			)
-			color.Red("Max iterations reached")
 			return toolPrompt.FinalAnswer, chatHistory, nil
 		}
 
@@ -444,7 +435,9 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				zap.String("finalAnswer", toolPrompt.FinalAnswer),
 			)
 			if verbose {
-				color.Cyan("Final answer: %v\n\n", toolPrompt.FinalAnswer)
+				logger.Debug("最终答案",
+					zap.String("finalAnswer", toolPrompt.FinalAnswer),
+				)
 			}
 			return toolPrompt.FinalAnswer, chatHistory, nil
 		}
@@ -457,8 +450,14 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 			)
 
 			if verbose {
-				color.Blue("Iteration %d): executing tool %s\n", iterations, toolPrompt.Action.Name)
-				color.Cyan("Invoking %s tool with inputs: \n============\n%s\n============\n\n", toolPrompt.Action.Name, toolPrompt.Action.Input)
+				logger.Debug("执行工具迭代",
+					zap.Int("iteration", iterations),
+					zap.String("tool", toolPrompt.Action.Name),
+				)
+				logger.Debug("工具输入",
+					zap.String("tool", toolPrompt.Action.Name),
+					zap.String("input", toolPrompt.Action.Input),
+				)
 			}
 
 			// 开始工具执行计时
@@ -486,7 +485,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 					)
 					// 检查执行结果是否为空
 					if observation == "" {
-						toolPrompt.FinalAnswer = "我的模型是:" + model + "你的问题我好像没理解,请再问我一次吧！或者试试其他模型吧!"
+						toolPrompt.FinalAnswer = "我的模型是:" + model + "你的问题我好像没理解,你可以重新问我一次，我保证认真回答或者试试其他模型吧!"
 						assistantMessage, _ := json.Marshal(toolPrompt)
 						chatHistory = append(chatHistory, openai.ChatCompletionMessage{
 							Role:    openai.ChatMessageRoleAssistant,
@@ -507,7 +506,9 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 			}
 
 			if verbose {
-				color.Cyan("Observation: %s\n\n", observation)
+				logger.Debug("工具执行结果",
+					zap.String("observation", observation),
+				)
 			}
 
 			// 开始消息构建计时
@@ -534,7 +535,9 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 
 			// Start next iteration of LLM chat.
 			if verbose {
-				color.Blue("Iteration %d): chatting with LLM\n", iterations)
+				logger.Debug("开始新一轮对话",
+					zap.Int("iteration", iterations),
+				)
 			}
 
 			// 开始中间对话计时
@@ -563,7 +566,6 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 				logger.Debug("LLM 中间响应",
 					zap.String("response", resp),
 				)
-				color.Cyan("Intermediate response from LLM: %s\n\n", resp)
 			}
 
 			// 开始解析中间响应计时
@@ -582,7 +584,6 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 					logger.Warn("无法从 LLM 解析工具，总结最终答案",
 						zap.Error(err),
 					)
-					color.Cyan("Unable to parse tools from LLM (%s), summarizing the final answer.\n\n", err.Error())
 				}
 
 				chatHistory = append(chatHistory, openai.ChatCompletionMessage{

@@ -20,6 +20,7 @@ import (
 	"github.com/feiskyer/kube-copilot/pkg/utils"
 	"github.com/feiskyer/kube-copilot/pkg/workflows"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
@@ -37,17 +38,29 @@ var auditCmd = &cobra.Command{
 	Use:   "audit",
 	Short: "Audit security issues for a Pod",
 	Run: func(cmd *cobra.Command, args []string) {
+		// 获取日志记录器
+		logger := utils.GetLogger()
+		
 		if auditName == "" && len(args) > 0 {
 			auditName = args[0]
 		}
 		if auditName == "" {
-			fmt.Println("Please provide a pod name")
+			logger.Error("未提供 Pod 名称")
+			utils.Error("请提供一个 Pod 名称")
 			return
 		}
 
-		fmt.Printf("Auditing Pod %s/%s\n", auditNamespace, auditName)
+		logger.Info("开始审计 Pod",
+			zap.String("namespace", auditNamespace),
+			zap.String("name", auditName),
+		)
+		utils.Info(fmt.Sprintf("正在审计 Pod %s/%s", auditNamespace, auditName))
+		
 		response, err := workflows.AuditFlow(model, auditNamespace, auditName, verbose)
 		if err != nil {
+			logger.Error("审计失败",
+				zap.Error(err),
+			)
 			color.Red(err.Error())
 			return
 		}

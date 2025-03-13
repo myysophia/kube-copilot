@@ -165,6 +165,7 @@ example/
 .idea
 venv
 scripts
+logs
 
 .cursorignore
 .cursor/

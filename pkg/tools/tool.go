@@ -1,18 +1,16 @@
 package tools
 
 import (
-	"fmt"
 	"go.uber.org/zap"
+
+	"github.com/feiskyer/kube-copilot/pkg/utils"
 )
 
 var logger *zap.Logger
 
 func init() {
-	var err error
-	logger, err = zap.NewProduction()
-	if err != nil {
-		panic(fmt.Sprintf("无法初始化日志: %v", err))
-	}
+	// 使用新的日志工具包获取日志记录器
+	logger = utils.GetLogger()
 }
 
 // Tool 是一个接受输入并返回输出的函数类型

@@ -22,6 +22,7 @@ import (
 	"github.com/feiskyer/kube-copilot/pkg/workflows"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 const diagnoseSystemPrompt = `You are a seasoned expert in Kubernetes and cloud-native networking. Utilize a Chain of Thought (CoT) process to diagnose and resolve issues. Your explanations should be in simple terms for non-technical users to understand.
@@ -85,15 +86,24 @@ var diagnoseCmd = &cobra.Command{
 	Use:   "diagnose",
 	Short: "Diagnose problems for a Pod",
 	Run: func(cmd *cobra.Command, args []string) {
+		// 获取日志记录器
+		logger := utils.GetLogger()
+		
 		if diagnoseName == "" && len(args) > 0 {
 			diagnoseName = args[0]
 		}
 		if diagnoseName == "" {
-			fmt.Println("Please provide a pod name")
+			logger.Error("未提供 Pod 名称")
+			utils.Error("请提供一个 Pod 名称")
 			return
 		}
 
-		fmt.Printf("Diagnosing Pod %s/%s\n", diagnoseNamespace, diagnoseName)
+		logger.Info("开始诊断 Pod",
+			zap.String("namespace", diagnoseNamespace),
+			zap.String("name", diagnoseName),
+		)
+		utils.Info(fmt.Sprintf("正在诊断 Pod %s/%s", diagnoseNamespace, diagnoseName))
+		
 		messages := []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
@@ -106,6 +116,9 @@ var diagnoseCmd = &cobra.Command{
 		}
 		response, _, err := assistants.Assistant(model, messages, maxTokens, countTokens, verbose, maxIterations)
 		if err != nil {
+			logger.Error("诊断失败",
+				zap.Error(err),
+			)
 			color.Red(err.Error())
 			return
 		}
@@ -113,8 +126,11 @@ var diagnoseCmd = &cobra.Command{
 		instructions := fmt.Sprintf("Extract the final diagnose results and reformat in a concise Markdown response: %s", response)
 		result, err := workflows.AssistantFlow(model, instructions, verbose)
 		if err != nil {
+			logger.Error("格式化结果失败",
+				zap.Error(err),
+			)
 			color.Red(err.Error())
-			fmt.Println(response)
+			utils.Info(response)
 			return
 		}
 

@@ -15,7 +15,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"strings"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/feiskyer/kube-copilot/pkg/utils"
 	"github.com/feiskyer/kube-copilot/pkg/workflows"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var generatePrompt string
@@ -37,13 +37,25 @@ var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate Kubernetes manifests",
 	Run: func(cmd *cobra.Command, args []string) {
+		// 获取日志记录器
+		logger := utils.GetLogger()
+
 		if generatePrompt == "" {
+			logger.Error("未提供生成提示")
 			color.Red("Please specify a prompt")
 			return
 		}
 
+		logger.Info("开始生成 Kubernetes 清单",
+			zap.String("prompt", generatePrompt),
+			zap.String("model", model),
+		)
+
 		response, err := workflows.GeneratorFlow(model, generatePrompt, verbose)
 		if err != nil {
+			logger.Error("生成清单失败",
+				zap.Error(err),
+			)
 			color.Red(err.Error())
 			return
 		}
@@ -53,11 +65,16 @@ var generateCmd = &cobra.Command{
 		if strings.Contains(response, "```") {
 			yaml = utils.ExtractYaml(response)
 		}
-		fmt.Printf("\nGenerated manifests:\n\n")
+
+		logger.Info("生成清单成功",
+			zap.Int("yaml_length", len(yaml)),
+		)
+
+		utils.Info("生成的清单:")
 		color.New(color.FgGreen).Printf("%s\n\n", yaml)
 
 		// apply the yaml to kubernetes cluster
-		color.New(color.FgRed).Printf("Do you approve to apply the generated manifests to cluster? (y/n)")
+		color.New(color.FgRed).Printf("是否要将生成的清单应用到集群中？(y/n)")
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			approve := scanner.Text()
