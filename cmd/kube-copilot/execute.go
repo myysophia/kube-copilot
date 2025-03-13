@@ -121,6 +121,10 @@ const executeSystemPrompt_cn = `您是Kubernetes和云原生网络的技术专�
 - 使用 --no-headers 选项减少不必要的输出。
 - jq 表达式中，名称匹配必须使用 'test()'，避免使用 '=='。
 - 当工具执行结果为空时，必须在final_answer中明确告知用户"未找到相关信息"，不要返回示例或虚构的结果。
+示例：
+- 问题："查看名称包含nginx的pod的镜像版本是什么？"
+  - 正确：'kubectl get pods --no-headers | grep nginx | awk "{print $1}" | xargs -I {} kubectl get pod {} -o jsonpath="{.spec.containers[*].image}"'
+  - 错误：'kubectl get pods -o json | jq -r ".items[] | select(.metadata.name | test(\"nginx\")) | .spec.containers[].image"'
 
 重要提示：始终使用以下 JSON 格式返回响应：
 {

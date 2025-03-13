@@ -424,7 +424,18 @@ cmd := exec.Command("kubectl", strings.Split(command, " ")...)
 这个函数使用 Go 的 exec.Command 执行 kubectl 命令，假设命令以空格分隔为参数。
 它不支持管道（|）或 shell 特定的语法（如 grep），因为 exec.Command 是直接调用 kubectl 的子进程，而非 shell 环境。
 
-## prompt 优化
+
+11. 已经有结果了，因为解析失败，导致resp又重新需要喂给LLM做总结
+```json
+Unable to parse tools from LLM (invalid character '\n' in string literal), summarizing the final answer.
+```
+2025年03月12日19:29:51 如何优化LLM 输出的结果呢？如何避免这次chat请求，来提升性能并节省token
+
+12. 对于用户模糊的提问，LLM如何引导用户？ (暂不支持)
+    例如用户提问：iotdb 版本是什么?  这个对大模型来说会增加很多的token消耗，如何引导用户提供更多的信息，来减少token消耗呢？
+    需要保存上下文，来引导用户提供更多的信息，这个需要在chat的时候保存上下文，然后在下次chat的时候引导用户提供更多的信息。
+
+## prompt 优化 (已完成)
 ### 避免全量输出-o json 或者-o yaml
 大模型好像没有遵循我的prompt，总是会kubectl get nodes -o json，或kubectl get po -o json。 
 这个操作会产生大量的数据，超过上下文窗口。目前定义的max_token是2048

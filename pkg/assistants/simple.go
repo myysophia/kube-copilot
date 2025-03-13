@@ -177,7 +177,7 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 					)
 					// 检查执行结果是否为空
 					if observation == "" {
-						toolPrompt.FinalAnswer = "未找到相关信息"
+						toolPrompt.FinalAnswer = "我的模型是:" + model + "你的问题我好像没理解,你可以再问我一下或者试试其他模型吧!"
 						assistantMessage, _ := json.Marshal(toolPrompt)
 						chatHistory = append(chatHistory, openai.ChatCompletionMessage{
 							Role:    openai.ChatMessageRoleAssistant,
@@ -486,7 +486,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 					)
 					// 检查执行结果是否为空
 					if observation == "" {
-						toolPrompt.FinalAnswer = "未找到相关信息"
+						toolPrompt.FinalAnswer = "我的模型是:" + model + "你的问题我好像没理解,请再问我一次吧！或者试试其他模型吧!"
 						assistantMessage, _ := json.Marshal(toolPrompt)
 						chatHistory = append(chatHistory, openai.ChatCompletionMessage{
 							Role:    openai.ChatMessageRoleAssistant,
@@ -642,6 +642,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 // isTemplateValue 检查字符串是否为模板值或占位符
 // 参数：
 //   - value: 要检查的字符串
+//
 // 返回：
 //   - bool: 如果是模板值或占位符则返回true，否则返回false
 func isTemplateValue(value string) bool {
@@ -658,23 +659,23 @@ func isTemplateValue(value string) bool {
 		"换行符用 \\n 表示",
 		"换行符用\\n表示",
 	}
-	
+
 	// 如果值很短，可能是占位符
 	if len(value) < 10 {
 		return true
 	}
-	
+
 	// 检查是否包含模板模式
 	for _, pattern := range templatePatterns {
 		if strings.Contains(value, pattern) {
 			return true
 		}
 	}
-	
+
 	// 检查是否只包含指导性文本而没有实际内容
 	if strings.Contains(value, "<") && strings.Contains(value, ">") {
 		return true
 	}
-	
+
 	return false
 }
