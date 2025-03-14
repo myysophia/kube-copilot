@@ -1,4 +1,4 @@
-name: Release kube-copilot binary
+name: Release k8s-ai-agent binary
 on:
   push:
     tags:
