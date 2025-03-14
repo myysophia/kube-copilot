@@ -84,6 +84,14 @@ jobs:
               rhash --sha256 --sha512 --md5 "$file" >> checksums.txt
             fi
           done
+          # 调试：检查 checksums.txt 是否生成
+          if [ -f "checksums.txt" ]; then
+            echo "checksums.txt created successfully:"
+            cat checksums.txt
+          else
+            echo "Error: checksums.txt not found"
+            exit 1
+          fi
 
       - name: List build files
         run: |
@@ -93,9 +101,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ./build/*
-            ./build/checksums.txt
+          files: ./build/*
           draft: ${{ startsWith(github.ref, 'refs/tags/draft-') }}
           fail_on_unmatched_files: true
           body_path: release_notes.txt
