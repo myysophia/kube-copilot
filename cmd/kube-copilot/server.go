@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/feiskyer/kube-copilot/pkg/api"
 	"github.com/feiskyer/kube-copilot/pkg/assistants"
 	"github.com/feiskyer/kube-copilot/pkg/utils"
 )
@@ -87,7 +88,7 @@ func initLogger() {
 	logConfig := utils.DefaultLogConfig()
 	// 设置日志级别为 Debug
 	logConfig.Level = zapcore.DebugLevel
-	
+
 	var err error
 	logger, err = utils.InitLogger(logConfig)
 	if err != nil {
@@ -146,7 +147,7 @@ func setupRouter() *gin.Engine {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-OpenAI-Key", "X-API-Key", "X-Requested-With"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-OpenAI-Key", "X-API-Key", "X-Requested-With", "api-key"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -381,33 +382,33 @@ func setupRouter() *gin.Engine {
 
 			// 开始响应解析计时
 			perfStats.StartTimer("execute_response_parse")
-			
+
 			// 解析AI助手的响应
 			var aiResp AIResponse
-			
+
 			// 首先尝试标准JSON解析
 			err = json.Unmarshal([]byte(response), &aiResp)
-			
+
 			// 如果标准解析失败，尝试更健壮的解析方法
 			if err != nil {
 				logger.Debug("标准JSON解析失败，尝试更健壮的解析方法",
 					zap.Error(err),
 					zap.String("response", response),
 				)
-				
+
 				// 尝试使用工具函数提取final_answer
 				finalAnswer, extractErr := utils.ExtractField(response, "final_answer")
 				if extractErr == nil && finalAnswer != "" {
 					logger.Debug("成功使用工具函数提取final_answer",
 						zap.String("final_answer", finalAnswer),
 					)
-					
+
 					// 停止响应解析计时
 					parseDuration := perfStats.StopTimer("execute_response_parse")
 					logger.Debug("响应解析完成（工具函数提取）",
 						zap.Duration("duration", parseDuration),
 					)
-					
+
 					// 返回提取的final_answer
 					c.JSON(http.StatusOK, gin.H{
 						"message": finalAnswer,
@@ -415,20 +416,20 @@ func setupRouter() *gin.Engine {
 					})
 					return
 				}
-				
+
 				// 如果提取失败，尝试清理JSON后再解析
 				cleanedJSON := utils.CleanJSON(response)
 				if err2 := json.Unmarshal([]byte(cleanedJSON), &aiResp); err2 == nil && aiResp.FinalAnswer != "" {
 					logger.Debug("成功从清理后的JSON中提取final_answer",
 						zap.String("final_answer", aiResp.FinalAnswer),
 					)
-					
+
 					// 停止响应解析计时
 					parseDuration := perfStats.StopTimer("execute_response_parse")
 					logger.Debug("响应解析完成（清理JSON后解析）",
 						zap.Duration("duration", parseDuration),
 					)
-					
+
 					// 返回提取的final_answer
 					c.JSON(http.StatusOK, gin.H{
 						"message": aiResp.FinalAnswer,
@@ -436,7 +437,7 @@ func setupRouter() *gin.Engine {
 					})
 					return
 				}
-				
+
 				// 如果所有方法都失败，尝试从非标准JSON中提取
 				var genericResp map[string]interface{}
 				if err2 := json.Unmarshal([]byte(response), &genericResp); err2 == nil {
@@ -444,13 +445,13 @@ func setupRouter() *gin.Engine {
 						logger.Debug("成功从非标准JSON中提取final_answer",
 							zap.String("final_answer", finalAnswer),
 						)
-						
+
 						// 停止响应解析计时
 						parseDuration := perfStats.StopTimer("execute_response_parse")
 						logger.Debug("响应解析完成（非标准JSON提取）",
 							zap.Duration("duration", parseDuration),
 						)
-						
+
 						// 返回清理后的响应，只包含final_answer
 						cleanResp := map[string]interface{}{
 							"message": finalAnswer,
@@ -466,7 +467,7 @@ func setupRouter() *gin.Engine {
 				logger.Debug("所有解析方法均失败，返回原始响应",
 					zap.Duration("duration", parseDuration),
 				)
-				
+
 				// 如果无法提取final_answer，返回完整响应
 				c.JSON(http.StatusOK, gin.H{
 					"message": response,
@@ -480,7 +481,7 @@ func setupRouter() *gin.Engine {
 			logger.Debug("响应解析完成（标准格式）",
 				zap.Duration("duration", parseDuration),
 			)
-			
+
 			// 处理标准JSON响应
 			if aiResp.FinalAnswer != "" {
 				// 返回最终答案
@@ -533,14 +534,23 @@ var serverCmd = &cobra.Command{
 			zap.Int("port", port),
 		)
 
-		// Validate required flags
+		// 验证必要参数
 		if jwtKey == "" {
 			logger.Fatal("缺少必要参数: jwt-key")
 		}
 
-		r := setupRouter()
-		addr := fmt.Sprintf(":%d", port)
+		// 设置全局中间件
+		gin.SetMode(gin.ReleaseMode)
+		r := api.Router()
 
+		// 注入全局变量
+		r.Use(func(c *gin.Context) {
+			c.Set("logger", logger)
+			c.Set("jwtKey", jwtKey)
+			c.Next()
+		})
+
+		addr := fmt.Sprintf(":%d", port)
 		logger.Info("服务器开始监听",
 			zap.String("address", addr),
 		)

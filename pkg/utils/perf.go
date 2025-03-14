@@ -16,6 +16,9 @@ type PerfStats struct {
 	startTimes    map[string]time.Time       // 存储操作的开始时间
 	logger        *zap.Logger                // 日志记录器
 	enableLogging bool                       // 是否启用日志记录
+	timers        map[string]time.Duration
+	callCounts    map[string]int64
+	lastResetTime time.Time
 }
 
 // 全局性能统计实例
@@ -33,6 +36,9 @@ func GetPerfStats() *PerfStats {
 			metrics:       make(map[string][]time.Duration),
 			startTimes:    make(map[string]time.Time),
 			enableLogging: true,
+			timers:        make(map[string]time.Duration),
+			callCounts:    make(map[string]int64),
+			lastResetTime: time.Now(),
 		}
 	})
 	return globalPerfStats
@@ -59,6 +65,7 @@ func (p *PerfStats) StartTimer(operation string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.startTimes[operation] = time.Now()
+	p.timers[operation] = 0
 	
 	if p.enableLogging && p.logger != nil {
 		p.logger.Debug("开始计时操作",
@@ -94,6 +101,11 @@ func (p *PerfStats) StopTimer(operation string) time.Duration {
 		p.metrics[operation] = []time.Duration{}
 	}
 	p.metrics[operation] = append(p.metrics[operation], elapsed)
+	
+	if _, exists := p.timers[operation]; !exists {
+		p.timers[operation] = 0
+	}
+	p.timers[operation] = elapsed
 	
 	if p.enableLogging && p.logger != nil {
 		p.logger.Debug("完成计时操作",
@@ -278,4 +290,46 @@ func (p *PerfStats) TraceFunc(operation string) func() {
 	return func() {
 		p.StopTimer(operation)
 	}
+}
+
+// GetStats 获取所有性能统计信息
+func (p *PerfStats) GetStats() map[string]interface{} {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	stats := make(map[string]interface{})
+	
+	// 添加计时器信息
+	timers := make(map[string]time.Duration)
+	for name, duration := range p.timers {
+		timers[name] = duration
+	}
+	stats["timers"] = timers
+
+	// 添加调用次数信息
+	callCounts := make(map[string]int64)
+	for name, count := range p.callCounts {
+		callCounts[name] = count
+	}
+	stats["callCounts"] = callCounts
+
+	// 添加最后重置时间
+	stats["lastResetTime"] = p.lastResetTime
+
+	return stats
+}
+
+// Reset 重置所有性能统计信息
+func (p *PerfStats) Reset() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// 清空计时器
+	p.timers = make(map[string]time.Duration)
+	
+	// 清空调用次数
+	p.callCounts = make(map[string]int64)
+	
+	// 更新最后重置时间
+	p.lastResetTime = time.Now()
 } 

@@ -7,7 +7,8 @@ COMMIT_SHA=$(git rev-parse --short HEAD)
 
 # 编译参数
 LDFLAGS="-X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.CommitSHA=${COMMIT_SHA}"
-GOX_OS="linux darwin windows"
+#GOX_OS="linux darwin windows"
+GOX_OS="linux "
 GOX_ARCH="amd64 arm64"
 
 # 确保输出目录存在
