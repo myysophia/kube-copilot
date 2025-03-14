@@ -164,7 +164,6 @@ dmypy.json
 example/
 .idea
 venv
-scripts
 logs
 
 .cursorignore
