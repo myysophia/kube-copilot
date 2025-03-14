@@ -43,7 +43,6 @@ var tokenLimitsPerModel = map[string]int{
 	"text-davinci-002":       4096,
 	"text-davinci-003":       4096,
 	"qwen-plus":              4096,
-	"qwen-max":               8192,
 }
 
 // GetTokenLimits returns the maximum number of tokens for the given model.
