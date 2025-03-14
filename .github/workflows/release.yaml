@@ -54,8 +54,17 @@ jobs:
 
       - name: Build
         run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "Creating build directory..."
           mkdir -p build
+          echo "Making xcompile.sh executable..."
+          chmod +x ./scripts/xcompile.sh
+          echo "Running xcompile.sh..."
           ./scripts/xcompile.sh
+          echo "Build directory contents after compilation:"
+          ls -la build/
           # 验证构建结果
           for binary in build/*; do
             if [ -f "$binary" ]; then
