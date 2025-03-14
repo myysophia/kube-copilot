@@ -58,15 +58,15 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 		)
 		return "", nil, fmt.Errorf("unable to get OpenAI client: %v", err)
 	}
-
-	defer func() {
-		if countTokens {
-			count := llms.NumTokensFromMessages(chatHistory, model)
-			logger.Info("Token 统计",
-				zap.Int("total_tokens", count),
-			)
-		}
-	}()
+	//
+	//defer func() {
+	//	if countTokens {
+	//		count := llms.NumTokensFromMessages(chatHistory, model)
+	//		logger.Info("Token 统计",
+	//			zap.Int("total_tokens", count),
+	//		)
+	//	}
+	//}()
 
 	if verbose {
 		logger.Debug("开始第一轮对话")
