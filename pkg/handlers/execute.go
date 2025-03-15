@@ -152,9 +152,8 @@ func Execute(c *gin.Context) {
 	}
 
 	// 清理指令
-	cleanInstructions := strings.TrimPrefix(instructions, "/execute")
+	cleanInstructions := strings.TrimPrefix(instructions, "execute")
 	cleanInstructions = strings.TrimSpace(cleanInstructions)
-
 	logger.Debug("Execute 执行参数",
 		zap.String("model", executeModel),
 		zap.String("instructions", cleanInstructions),
@@ -178,7 +177,7 @@ func Execute(c *gin.Context) {
 	perfStats.StartTimer("execute_assistant")
 
 	// 调用 AI 助手
-	response, _, err := assistants.AssistantWithConfig(executeModel, messages, 20480, true, true, 10, apiKey, req.BaseUrl)
+	response, _, err := assistants.AssistantWithConfig(executeModel, messages, 8192, true, true, 10, apiKey, req.BaseUrl)
 
 	// 停止 AI 助手执行计时
 	assistantDuration := perfStats.StopTimer("execute_assistant")

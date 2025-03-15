@@ -210,7 +210,7 @@ func Assistant(model string, prompts []openai.ChatCompletionMessage, maxTokens i
 			})
 			// Constrict the chat history to the max tokens allowed by the model.
 			// This is required because the chat history may have grown too large.
-			chatHistory = llms.ConstrictMessages(chatHistory, model, maxTokens)
+			//chatHistory = llms.ConstrictMessages(chatHistory, model, maxTokens)
 
 			// Start next iteration of LLM chat.
 			if verbose {
@@ -525,7 +525,7 @@ func AssistantWithConfig(model string, prompts []openai.ChatCompletionMessage, m
 			})
 			// Constrict the chat history to the max tokens allowed by the model.
 			// This is required because the chat history may have grown too large.
-			chatHistory = llms.ConstrictMessages(chatHistory, model, maxTokens)
+			//chatHistory = llms.ConstrictMessages(chatHistory, model, maxTokens)
 
 			// 停止消息构建计时
 			constructDuration := perfStats.StopTimer("assistant_construct_message")
