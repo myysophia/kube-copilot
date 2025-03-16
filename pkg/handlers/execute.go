@@ -56,6 +56,8 @@ const executeSystemPrompt_cn = `您是Kubernetes和云原生网络的技术专�
 - 避免使用 -o json/yaml 全量输出，优先使用 jsonpath 或 custom-columns 进行精确查询。
 - 使用 --no-headers 选项减少不必要的输出。
 - jq 表达式中，名称匹配必须使用 'test()'，避免使用 '=='。
+- Bash 命令需正确转义特殊字符（如 []、"），必要时用单引号包裹参数。
+- 检查 Bash 转义并修复错误，确保命令正确执行。
 - 当工具执行结果为空时，必须在final_answer中明确告知用户"未找到相关信息"，不要返回示例或虚构的结果。
 示例：
 - 问题："查看名称包含nginx的pod的镜像版本是什么？"
